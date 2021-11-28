@@ -13,6 +13,10 @@ Change log
 Oct 5, 2021
 - New consolidated version for use with new client Win 201x / Win 10 golden image builds
 
+Nov 28, 2021
+-Updated path for teams JSON 
+-Added silent exit on error
+
 #> 
 
 IF (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -99,7 +103,7 @@ $appScriptDirectory = Get-ScriptDirectory
 # Application related
 ##*===============================================
 $appProcesses = @("regedit", "reg")
-$appTeamsConfigURL = "https://raw.githubusercontent.com/JonathanPitre/Scripts/master/Default%20User%20Profile/desktop-config.json"
+$appTeamsConfigURL = "https://raw.githubusercontent.com/JonathanPitre/Apps/master/Microsoft/Teams/desktop-config.json"
 $appTeamsConfig = Split-Path -Path $appTeamsConfigURL -Leaf
 $NewUserScript = "\\$env:USERDNSDOMAIN\NETLOGON\NewUserProfile\Set-NewUserProfile.ps1" # Modify according to your environment
 ##*===============================================
@@ -223,7 +227,7 @@ Set-Location -Path $appScriptDirectory
 Write-Log -Message "Saving a Default User registry hive copy..." -Severity 1 -LogType CMTrace -WriteHost $True
 If (-Not(Test-Path -Path "$envSystemDrive\Users\Default\NTUSER.DAT.bak"))
 {
-    Copy-File -Path "$envSystemDrive\Users\Default\NTUSER.DAT" -Destination "$appScriptDirectory\NTUSER.DAT.BAK"
+    Copy-File -Path "$envSystemDrive\Users\Default\NTUSER.DAT" -Destination "$appScriptDirectory\NTUSER.DAT.BAK" -ContinueFileCopyOnError
 }
 
 # Load the Default User registry hive
@@ -550,7 +554,7 @@ Else
 }
 
 # Copy Microsoft Teams config file to the default profile
-Copy-File -Path "$appScriptDirectory\$appTeamsConfig" -Destination "$envSystemDrive\Users\Default\AppData\Roaming\Microsoft\Teams"
+Copy-File -Path "$appScriptDirectory\$appTeamsConfig" -Destination "$envSystemDrive\Users\Default\AppData\Roaming\Microsoft\Teams" -ErrorAction SilentlyContinue
 
 # To validate (from the comments section)
 #Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Classes\WOW6432Node\CLSID\{00425F68-FFC1-445F-8EDF-EF78B84BA1C7}\LocalServer" -Name "(Default)" -Type String -Value "`"C:\Program Files (x86)\Microsoft\Teams\current\Teams.exe`""
@@ -572,11 +576,11 @@ If (-not(Test-Path $RunOnceKey))
 # Set-RegistryKey -Key $RunOnceKey -Name "NewUser" -Type String -Value "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe -ExecutionPolicy ByPass -File $NewUserScript"
 
 # Unload the Default User registry hive
-Execute-Process -Path "$envWinDir\System32\reg.exe" -Parameters "UNLOAD HKLM\DefaultUser" -WindowStyle Hidden
+Execute-Process -Path "$envWinDir\System32\reg.exe" -Parameters "UNLOAD HKLM\DefaultUser" -WindowStyle Hidden -ContinueOnError
 
 start-sleep -s 10
 
-Execute-Process -Path "$envWinDir\System32\reg.exe" -Parameters "UNLOAD HKLM\DefaultUser" -WindowStyle Hidden
+Execute-Process -Path "$envWinDir\System32\reg.exe" -Parameters "UNLOAD HKLM\DefaultUser" -WindowStyle Hidden -ContinueOnError
 
 # Cleaup temp files
 Remove-Item -Path "$envSystemDrive\Users\Default\*.LOG1" -Force
