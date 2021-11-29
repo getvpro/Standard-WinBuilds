@@ -20,6 +20,9 @@ Change log
 Nov 3, 2021
 -Initial version
 
+Nov 29, 2021
+-Added download of delprof2.exe from getvpro github
+
 .DESCRIPTION
 Author oreynolds@gmail.com
 
@@ -158,6 +161,10 @@ IF (-not(test-path $CurrentDir\Build)) {
 
 }
 
+Write-CustomLog -Message "Downloading delfprof.exe from getvpro github" -Level INFO -ScriptLog $ScriptLog
+
+Invoke-WebRequest -Uri "https://github.com/getvpro/Standard-WinBuilds/blob/master/Delprof2/DelProf2.exe?raw=true" -OutFile "C:\Windows\System32\delprof2.exe"
+
 Write-CustomLog -Message "Running MCS prep steps" -Level INFO -ScriptLog $ScriptLog
 
 ### Pre-check section, the script will exit if these conditions are not met
@@ -176,6 +183,7 @@ IF ($Env:Username -ne "$CTXBuildIDName") {
 if (Test-PendingReboot -eq $True) {
 
     Write-CustomLog -Message A reboot is pending on this machine. Please reboot this machine first -Level WARN -ScriptLog $ScriptLog
+    EXIT
 
 }
 
@@ -227,7 +235,10 @@ IF (Get-Service -Name AppVClient -ErrorAction $ErrorActionPreference) {
 
 }
 
+### Delete WEM cache
+### If win updates running, stop / disable
+
 Write-CustomLog -Message "End of Win 10 $BuildEnv script processing @ $shortDate" -Level INFO -ScriptLog $ScriptLog
 Write-CustomLog -Message "Software installation is now completed. The computer $envComputerName will now reboot!" -Level INFO -ScriptLog $ScriptLog
 Start-Sleep -s 15
-Restart-Computer -Force
+Stop-Computer -Force
