@@ -23,6 +23,9 @@ Nov 3, 2021
 Nov 29, 2021
 -Added download of delprof2.exe from getvpro github
 
+Nov 30, 2021
+-Windows update will be set to disabled
+
 .DESCRIPTION
 Author oreynolds@gmail.com
 
@@ -214,6 +217,9 @@ Get-ChildItem $env:Temp -recurse | Remove-Item -ErrorAction $ErrorActionPreferen
 
 ### Clear recycle bin
 Clear-RecycleBin -force
+
+### Set windows update to startup type disabled
+Set-Service -Name wuauserv -StartupType Disabled -ErrorAction SilentlyContinue
 
 <#Set WU-Updates key back to default, which is 1
 IF ((Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU").UseWUServer -ne "1") {
