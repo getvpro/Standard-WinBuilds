@@ -29,6 +29,9 @@ Nov 30, 2021
 Dec 10, 2021
 -Added WEM cache reset
 
+Dec 12, 2021
+-Amended WEM cache after live test on client
+
 .DESCRIPTION
 Author oreynolds@gmail.com
 
@@ -244,28 +247,24 @@ IF (Get-Service -Name AppVClient -ErrorAction $ErrorActionPreference) {
 
 }
 
-### Delete WEM cache on a PVS device
+### Reset WEM cache, defaults are used, amend line 255 as required
 ### https://www.carlstalhood.com/workspace-environment-management/
 IF (Get-service -Name WemAgentSVC -ErrorAction SilentlyContinue) {
 
     Stop-Service -Name WemAgentSVC -force
 
-    Stop-Service -Name WemLogonSVC -force    
+    Stop-Service -Name WemLogonSVC -force
 
-    #net stop "Citrix WEM Agent Host Service" /y
-    #net stop "Norskale Agent Host Service" /y
+    GCI "C:\Program Files (x86)\Citrix\Workspace Environment Management Agent\Local Databases" | Remove-item -Force    
     
-    GCI D:\WEMCache\ /S /F /q
-    
-    Start-Service -Name WemAgentSVC -force
+    Start-Service -Name WemAgentSVC
 
-    Start-Service -Name WemLogonSVC -force
+    Start-Service -Name WemLogonSVC
     
     Start-Service -Name "Netlogon"    
     Start-sleep -Seconds 45
 
-    #"C:\Program Files (x86)\Citrix\Workspace Environment Management Agent\AgentCacheUtility.exe" -refreshcache -brokername:XXXX
-    #"C:\Program Files (x86)\Norskale\Norskale Agent Host\AgentCacheUtility.exe" -refreshCache -brokerName:XXXX
+    Start-Process -FilePath "C:\Program Files (x86)\Citrix\Workspace Environment Management Agent\AgentCacheUtility.exe" -ArgumentList "-refreshcache -brokername:DENT-XWEM-01"
 
 }
 
