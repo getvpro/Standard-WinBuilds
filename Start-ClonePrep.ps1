@@ -32,6 +32,9 @@ Dec 10, 2021
 Dec 12, 2021
 -Amended WEM cache after live test on client
 
+Dec 13, 2021
+-Corrected type-o on use of $CTXBuildIDName
+
 .DESCRIPTION
 Author oreynolds@gmail.com
 
@@ -57,7 +60,7 @@ Else {
 }
 
 ### Change per environment here
-$CTXBuildIDName = ""
+$CTXBuildIDName = "SA_CTXBUILD"
 
 ###
 $ErrorActionPreference = "SilentlyContinue"
@@ -177,7 +180,7 @@ Invoke-WebRequest -Uri "https://github.com/getvpro/Standard-WinBuilds/blob/maste
 Write-CustomLog -Message "Running MCS prep steps" -Level INFO -ScriptLog $ScriptLog
 
 ### Pre-check section, the script will exit if these conditions are not met
-IF (($CTXBuildName).Length -ge 0) {
+IF (($CTXBuildIDName).Length -eq 0) {
 
     Write-CustomLog -Message "You must enter in a build ID into line 48. If you don't have a dedicated ID, enter in your own ID. The script will now exit." -Level WARN -ScriptLog $ScriptLog
 
