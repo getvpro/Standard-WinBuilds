@@ -34,6 +34,7 @@ Dec 12, 2021
 
 Dec 13, 2021
 -Corrected type-o on use of $CTXBuildIDName
+-Added quotes to to message for pending reboot
 
 .DESCRIPTION
 Author oreynolds@gmail.com
@@ -194,7 +195,7 @@ IF ($Env:Username -ne "$CTXBuildIDName") {
 
 if (Test-PendingReboot -eq $True) {
 
-    Write-CustomLog -Message A reboot is pending on this machine. Please reboot this machine first -Level WARN -ScriptLog $ScriptLog
+    Write-CustomLog -Message "A reboot is pending on this machine. Please reboot this machine first" -Level WARN -ScriptLog $ScriptLog
     EXIT
 
 }
