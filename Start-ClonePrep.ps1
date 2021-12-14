@@ -34,7 +34,11 @@ Dec 12, 2021
 
 Dec 13, 2021
 -Corrected type-o on use of $CTXBuildIDName
--Added quotes to to message for pending reboot
+
+Dec 14, 2021
+-Delprof2 only downloaded when not required
+-Exit if not run as admin
+-Pause statements added before any EXITs
 
 .DESCRIPTION
 Author oreynolds@gmail.com
@@ -61,7 +65,7 @@ Else {
 }
 
 ### Change per environment here
-$CTXBuildIDName = "SA_CTXBUILD"
+$CTXBuildIDName = ""
 
 ###
 $ErrorActionPreference = "SilentlyContinue"
@@ -174,9 +178,17 @@ IF (-not(test-path $CurrentDir\Build)) {
 
 }
 
-Write-CustomLog -Message "Downloading delfprof.exe from getvpro github" -Level INFO -ScriptLog $ScriptLog
+IF (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 
-Invoke-WebRequest -Uri "https://github.com/getvpro/Standard-WinBuilds/blob/master/Delprof2/DelProf2.exe?raw=true" -OutFile "C:\Windows\System32\delprof2.exe"
+    Write-CustomLog -Message "not started as elevated session, exiting" -Level WARN -ScriptLog $ScriptLog
+    PAUSE
+}
+
+IF (-not(test-path "C:\Windows\System32\delprof2.exe")) {
+
+    Write-CustomLog -Message "Downloading delfprof.exe from getvpro github" -Level INFO -ScriptLog $ScriptLog
+    Invoke-WebRequest -Uri "https://github.com/getvpro/Standard-WinBuilds/blob/master/Delprof2/DelProf2.exe?raw=true" -OutFile "C:\Windows\System32\delprof2.exe"
+}
 
 Write-CustomLog -Message "Running MCS prep steps" -Level INFO -ScriptLog $ScriptLog
 
@@ -184,20 +196,20 @@ Write-CustomLog -Message "Running MCS prep steps" -Level INFO -ScriptLog $Script
 IF (($CTXBuildIDName).Length -eq 0) {
 
     Write-CustomLog -Message "You must enter in a build ID into line 48. If you don't have a dedicated ID, enter in your own ID. The script will now exit." -Level WARN -ScriptLog $ScriptLog
+    PAUSE    
 
 }
 
 IF ($Env:Username -ne "$CTXBuildIDName") {
 
     Write-CustomLog -Message "The build script must be from the $CTXBuildIDName account. The script will now exit." -Level WARN -ScriptLog $ScriptLog
-    EXIT
+    PAUSE    
 }
 
 if (Test-PendingReboot -eq $True) {
 
     Write-CustomLog -Message "A reboot is pending on this machine. Please reboot this machine first" -Level WARN -ScriptLog $ScriptLog
-    EXIT
-
+    PAUSE
 }
 
 Else {
@@ -274,6 +286,6 @@ IF (Get-service -Name WemAgentSVC -ErrorAction SilentlyContinue) {
 
 
 Write-CustomLog -Message "End of Win 10 $BuildEnv script processing @ $shortDate" -Level INFO -ScriptLog $ScriptLog
-Write-CustomLog -Message "Software installation is now completed. The computer $envComputerName will now reboot!" -Level INFO -ScriptLog $ScriptLog
-Start-Sleep -s 15
+Write-CustomLog -Message "Software installation is now completed. The computer $envComputerName will shutdown in 30 seconds!" -Level INFO -ScriptLog $ScriptLog
+Start-Sleep -s 30
 Stop-Computer -Force
