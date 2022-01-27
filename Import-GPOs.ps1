@@ -1,4 +1,30 @@
-﻿if (test-path 'C:\Admin\GPO Export') {
+﻿<#
+.FUNCTIONALITY
+Used to import backed up GPOs. You will need to create a folder called c:\Admin\GPOImport on the computer you run this script from on the client domain. 
+
+You would then extract/copy over your GPOs in the following format:
+
+c:\Admin\GPOImport\GPO1\{LongGUIDHERE}
+c:\Admin\GPOImport\GPO2\{LongGUIDHERE}
+c:\Admin\GPOImport\GPO3\{LongGUIDHERE}
+
+The script will recurse through the sub-folder to ID the correct GPO Name the GPBackup.XML file 
+
+If a GPO exists already, then the following will be appended: Citrx_VDA_Common_(imported_1/27/2022-158PM)
+
+This will avoid over-writing existing GPOs with the same name
+
+.SYNOPSIS
+- See above
+.NOTES
+Change log
+
+Jan 27, 2022
+- Initial version
+
+#> 
+
+if (test-path 'C:\Admin\GPO Export') {
 
     $GPOPath =  "C:\Admin\GPOImport"
 
