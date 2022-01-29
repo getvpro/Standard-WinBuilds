@@ -22,9 +22,12 @@ Change log
 Jan 27, 2022
 - Initial version
 
+Jan 28, 2022
+Type-o on Line 30 for test-path
+
 #> 
 
-if (test-path 'C:\Admin\GPO Export') {
+if (test-path "C:\Admin\GPOImport") {
 
     $GPOPath =  "C:\Admin\GPOImport"
 
