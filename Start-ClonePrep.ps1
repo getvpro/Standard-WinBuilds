@@ -40,6 +40,9 @@ Dec 14, 2021
 -Exit if not run as admin
 -Pause statements added before any EXITs
 
+Feb 7, 2022
+-Various edits
+
 .DESCRIPTION
 Author oreynolds@gmail.com
 
@@ -203,13 +206,15 @@ IF (($CTXBuildIDName).Length -eq 0) {
 IF ($Env:Username -ne "$CTXBuildIDName") {
 
     Write-CustomLog -Message "The build script must be from the $CTXBuildIDName account. The script will now exit." -Level WARN -ScriptLog $ScriptLog
-    PAUSE    
+    PAUSE
+    EXIT
 }
 
 if (Test-PendingReboot -eq $True) {
 
     Write-CustomLog -Message "A reboot is pending on this machine. Please reboot this machine first" -Level WARN -ScriptLog $ScriptLog
     PAUSE
+    EXIT
 }
 
 Else {
@@ -233,7 +238,7 @@ Write-CustomLog -Message "Clearing old cached profiles and temp files" -Level IN
 
 ### Run delprof2 to remove any locally cached profiles
 Set-Location c:\Windows\System32
-Delprof2.exe /ed:*administrator* /ed:$CTXBUILD /u
+Delprof2.exe /ed:*administrator* /ed:$CTXBuildIDName /u
 
 Get-ChildItem $env:Temp -recurse | Remove-Item -ErrorAction $ErrorActionPreference  -Force -Recurse
 
@@ -286,6 +291,6 @@ IF (Get-service -Name WemAgentSVC -ErrorAction SilentlyContinue) {
 
 
 Write-CustomLog -Message "End of Win 10 $BuildEnv script processing @ $shortDate" -Level INFO -ScriptLog $ScriptLog
-Write-CustomLog -Message "Software installation is now completed. The computer $envComputerName will shutdown in 30 seconds!" -Level INFO -ScriptLog $ScriptLog
+Write-CustomLog -Message "Software installation is now completed. The computer $env:ComputerName will shutdown in 30 seconds!" -Level INFO -ScriptLog $ScriptLog
 Start-Sleep -s 30
 Stop-Computer -Force
