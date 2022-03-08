@@ -43,6 +43,9 @@ Dec 14, 2021
 Feb 7, 2022
 -Various edits
 
+-March 8, 2022
+Added SCCM specific config 
+
 .DESCRIPTION
 Author oreynolds@gmail.com
 
@@ -68,7 +71,7 @@ Else {
 }
 
 ### Change per environment here
-$CTXBuildIDName = ""
+$CTXBuildIDName = "NACTXBUILD"
 
 ###
 $ErrorActionPreference = "SilentlyContinue"
@@ -290,7 +293,19 @@ IF (Get-service -Name WemAgentSVC -ErrorAction SilentlyContinue) {
 }
 
 
+IF (Get-Service CcmExec -ErrorAction SilentlyContinue) {
+
+    Stop-Service -Name CcmExec -Force
+    Remove-Item -Path $env:windir\smscfg.ini -Force
+    Remove-Item -Path HKLM:\Software\Microsoft\SystemCertificates\SMS\Certificates\* -Force
+    cmd.exe /c 'wmic /namespace:\\root\ccm\invagt path inventoryActionStatus where InventoryActionID="{00000000-0000-0000-0000-000000000001}" DELETE /NOINTERACTIVE'
+    Start-Service -Name CcmExec
+
+}
+
 Write-CustomLog -Message "End of Win 10 $BuildEnv script processing @ $shortDate" -Level INFO -ScriptLog $ScriptLog
 Write-CustomLog -Message "Software installation is now completed. The computer $env:ComputerName will shutdown in 30 seconds!" -Level INFO -ScriptLog $ScriptLog
-Start-Sleep -s 30
+
+
+Start-Sleep -s 10
 Stop-Computer -Force
