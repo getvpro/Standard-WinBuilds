@@ -43,8 +43,9 @@ Dec 14, 2021
 Feb 7, 2022
 -Various edits
 
--March 8, 2022
-Added SCCM specific config 
+March 10, 2022
+-SCCM edit as per https://support.citrix.com/article/CTX238513
+-Removed references to Win 10
 
 .DESCRIPTION
 Author oreynolds@gmail.com
@@ -229,7 +230,7 @@ Else {
 [Environment]::SetEnvironmentVariable("BuildEnv", "$BuildEnv", "Machine")
 [Environment]::SetEnvironmentVariable("CTXBuildDate", "$CTXBuildDate", "Machine")
 
-Write-CustomLog -Message "Reset Win 10 start menu/taskbar for current_user based on custom layout copied down in preceding step" -Level INFO -ScriptLog $ScriptLog
+Write-CustomLog -Message "Reset Windows start menu/taskbar for current_user based on custom layout copied down in preceding step" -Level INFO -ScriptLog $ScriptLog
 
 Copy-Item -path "c:\users\default\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml" -Destination "$env:LocalAppData\Microsoft\Windows\Shell" -force
 
@@ -292,20 +293,13 @@ IF (Get-service -Name WemAgentSVC -ErrorAction SilentlyContinue) {
 
 }
 
+Stop-Service -Name CcmExec -Force
+Remove-Item -Path $env:windir\smscfg.ini -Force
+Remove-Item -Path HKLM:\Software\Microsoft\SystemCertificates\SMS\Certificates\* -Force
+cmd.exe /c 'wmic /namespace:\\root\ccm\invagt path inventoryActionStatus where InventoryActionID="{00000000-0000-0000-0000-000000000001}" DELETE /NOINTERACTIVE'
 
-IF (Get-Service CcmExec -ErrorAction SilentlyContinue) {
-
-    Stop-Service -Name CcmExec -Force
-    Remove-Item -Path $env:windir\smscfg.ini -Force
-    Remove-Item -Path HKLM:\Software\Microsoft\SystemCertificates\SMS\Certificates\* -Force
-    cmd.exe /c 'wmic /namespace:\\root\ccm\invagt path inventoryActionStatus where InventoryActionID="{00000000-0000-0000-0000-000000000001}" DELETE /NOINTERACTIVE'
-    Start-Service -Name CcmExec
-
-}
-
-Write-CustomLog -Message "End of Win 10 $BuildEnv script processing @ $shortDate" -Level INFO -ScriptLog $ScriptLog
+Write-CustomLog -Message "End of Windows clone $BuildEnv script processing @ $shortDate" -Level INFO -ScriptLog $ScriptLog
 Write-CustomLog -Message "Software installation is now completed. The computer $env:ComputerName will shutdown in 30 seconds!" -Level INFO -ScriptLog $ScriptLog
-
 
 Start-Sleep -s 10
 Stop-Computer -Force
