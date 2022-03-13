@@ -20,6 +20,9 @@ Dec 1, 2021
 -PowerShellGet installed before PSADT to resolve prompt on pre-req
 -Powershell security changes
 
+March 13, 2022
+-Re-written to support offline build use
+
 .EXAMPLE
 ./Install-HyperVisorDrivers.ps1
 
@@ -40,29 +43,15 @@ IF (-not(test-path c:\admin\Build)) {
 
 $OS = (Get-WMIobject -class win32_operatingsystem).Caption
 $LogTimeStamp = (Get-Date).ToString('MM-dd-yyyy-hhmm-tt')
+$ScriptLog = "c:\Admin\Build\HyperVisorDriverInstall-$LogTimeStamp.txt"
 
 ### Powershell module/package management pre-reqs
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 [System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
 
-IF ($env:PackerLaunched -eq 1) {
-    
-    $ScriptLog = (Get-ChildItem C:\Admin\Build | Sort-Object -Property LastWriteTime | Where-object {$_.Name -like "WinPackerBuild*"} | Select -first 1).FullName
-    
-}
-
-Else {
-    
-    $ScriptLog = "c:\Admin\Build\WinPackerBuild-$LogTimeStamp.txt"
-
-}
-
 ###
 
-write-host "Installing Powershell modules/package managers" -ForegroundColor Cyan
-
-Write-CustomLog -ScriptLog $ScriptLog -Message "Installing PowershellGet / nuget package providers" -Level INFO
-
+<#
 Install-PackageProvider -Name PowerShellGet -Force -Confirm:$False
 Install-PackageProvider -Name Nuget -Force -Confirm:$False
 
@@ -83,6 +72,8 @@ Else {
  EXIT
 
 }
+
+#>
 
 
 ###
@@ -140,21 +131,6 @@ Function Write-CustomLog {
         Add-content -value "$Message" -Path $ScriptLog
 }
 
-Function Show-Status {
-
-    import-module PSADT -Force
-
-    Show-InstallationProgress -StatusMessage "VMware tools is installed `n
-    The remote packer instance will power off the VM to complete phase 1 of the build process `n
-    The PowerCLI script running on the same machine running packer will then power the VM back on `n
-    With the VM powered back on, phase 2 will start, where a custom Windows Update task / script will be downloaded/imported/ran to fully patch the system"
-
-    Start-Sleep -Seconds 5
-
-    Close-InstallationProgress
-
-}
-
 ### VMware
 ### REBOOT=R means supress reboot
 
@@ -168,7 +144,7 @@ IF ($VMType -eq "VMware, Inc.") {
     $Running = $false
     $iRepeat = 0
 
-    while (-not$Running -and $iRepeat -lt 5) {      
+    while (-not $Running -and $iRepeat -lt 5) {      
 
       Write-CustomLog -ScriptLog $ScriptLog -Message "Pause for 2 seconds to check running state on VMware tools service" -Level INFO
       Start-Sleep -s 2
@@ -186,16 +162,7 @@ IF ($VMType -eq "VMware, Inc.") {
         $Running = $true
 
         Write-CustomLog -ScriptLog $ScriptLog -Message "VMware tools service found to be running state after first install attempt" -Level INFO
-
-        Write-CustomLog -ScriptLog $ScriptLog -Message "Installing Powershell Get package provider" -Level WARN
         
-        Install-PackageProvider -Name PowerShellGet -Force
-        
-        Write-CustomLog -ScriptLog $ScriptLog -Message "Installing PSADT module" -Level WARN
-        
-        Install-Module -Name PSADT -AllowClobber -Force
-
-        Show-Status
       }
 
     }
@@ -224,6 +191,7 @@ IF ($VMType -eq "VMware, Inc.") {
       Write-CustomLog -ScriptLog $ScriptLog -Message "Running re-install of VMware tools install" -Level INFO
     
       #Install VMWare Tools
+
       Start-Process "$CDDrive\hypervisor_drivers\VMware-tools-11.3.5 x64.exe" -ArgumentList '/s /v "/qb REBOOT=R"' -Wait
 
       ### 6 - Re-check again if VMTools service has been installed and is started
@@ -231,6 +199,7 @@ IF ($VMType -eq "VMware, Inc.") {
      Write-CustomLog -ScriptLog $ScriptLog -Message "Re-checking if VMTools service has been installed and is started" -Level INFO 
   
     $iRepeat = 0
+
     while (-not$Running -and $iRepeat -lt 5) {
 
         Start-Sleep -s 2
@@ -246,18 +215,7 @@ IF ($VMType -eq "VMware, Inc.") {
         Else {
 
           $Running = $true
-          Write-CustomLog -ScriptLog $ScriptLog -Message "VMware tools service found to be running state after SECOND install attempt" -Level INFO
-      
-          Write-CustomLog -ScriptLog $ScriptLog -Message "Installing Powershell Get package provider" -Level WARN
-        
-		  Install-PackageProvider -Name PowerShellGet -Force
-        
-          Write-CustomLog -ScriptLog $ScriptLog -Message "Installing PSADT module" -Level WARN
-        
-          Install-Module -Name PSADT -AllowClobber -Force
-      
-          Show-Status
-        }
+          Write-CustomLog -ScriptLog $ScriptLog -Message "VMware tools service found to be running state after SECOND install attempt" -Level INFO          
 
       }
 
