@@ -156,17 +156,8 @@ If (-not(test-path c:\admin -ErrorAction SilentlyContinue)) {
 
 # Set log path based on being launched by packer, or not
 
-IF ($PackerRegKey -eq 1) {
+$ScriptLog = "c:\Admin\Build\Start-PostOSInstall-$LogTimeStamp.txt"
 
-    $ScriptLog = "c:\Admin\Build\WinPackerBuild-$LogTimeStamp.txt"
-    
-}
-
-Else {
-    
-    $ScriptLog = (Get-ChildItem C:\Admin\Build | Sort-Object -Property LastWriteTime | Where-object {$_.Name -like "WinPackerBuild*"} | Select -first 1).FullName
-
-}
 
 if (-not(Get-Variable ScriptLog -ErrorAction SilentlyContinue)) {
 
@@ -413,7 +404,7 @@ Else {
 If ((Get-NetConnectionProfile).IPv4Connectivity -eq 'Internet') {
 
 
-    Write-host "$IPGW pings back as expected" -ForegroundColor Green
+    Write-host "Basic internet connectivity test completed" -ForegroundColor Green
 
 }
 

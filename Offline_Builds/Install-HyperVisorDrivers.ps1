@@ -7,7 +7,6 @@
 -The script assumes the VM has NOT internet access, so is hard-coded to use the drivers in the above path , which are the latest as of Nov 30, 2021
 -Updates to VMware drivers can later be handled via the following script: https://github.com/JonathanPitre/Apps/tree/master/VMWare/Tools
 -Automated updates to Nutanix/Citrix are TBD
--For use with offline builds
 
 .NOTES
 Change log
@@ -20,8 +19,9 @@ Dec 1, 2021
 -PowerShellGet installed before PSADT to resolve prompt on pre-req
 -Powershell security changes
 
-March 13, 2022
--Re-written to support offline build use
+March 14, 2022
+-Offline version
+-New variable of $VMT used to stop VMware tools from re-installing where it's already installed, mostly for testing script edits
 
 .EXAMPLE
 ./Install-HyperVisorDrivers.ps1
@@ -43,38 +43,12 @@ IF (-not(test-path c:\admin\Build)) {
 
 $OS = (Get-WMIobject -class win32_operatingsystem).Caption
 $LogTimeStamp = (Get-Date).ToString('MM-dd-yyyy-hhmm-tt')
-$ScriptLog = "c:\Admin\Build\HyperVisorDriverInstall-$LogTimeStamp.txt"
 
 ### Powershell module/package management pre-reqs
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 [System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
 
-###
-
-<#
-Install-PackageProvider -Name PowerShellGet -Force -Confirm:$False
-Install-PackageProvider -Name Nuget -Force -Confirm:$False
-
-Write-CustomLog -ScriptLog $ScriptLog -Message "Installing Powershell App Deploy ToolKit module" -Level INFO
-Install-Module -Name PSADT -AllowClobber -Force -Confirm:$False
-Write-CustomLog -ScriptLog $ScriptLog -Message "Installing Powershell App Deploy ToolKit module" -Level INFO
-Install-Module -Name PSADT -AllowClobber -Force
-
-if (Get-module -ListAvailable -name PSADT) {
-
- Write-host "Pre-req PSADT is installed, script will continue" -ForegroundColor Green
-
-}
-
-Else {
-
- Write-warning "Internet / Proxy / Firewall issues are preventing the installation of pre-req modules, please resolve and re-try, script will exit" 
- EXIT
-
-}
-
-#>
-
+$ScriptLog = "c:\Admin\Build\HyperVisorDriverInstall-$LogTimeStamp.txt"
 
 ###
 
@@ -131,10 +105,13 @@ Function Write-CustomLog {
         Add-content -value "$Message" -Path $ScriptLog
 }
 
+
 ### VMware
 ### REBOOT=R means supress reboot
 
-IF ($VMType -eq "VMware, Inc.") {
+$VMT = Get-VMToolsInstalled
+
+IF (($VMType -eq "VMware, Inc.") -and (-not($VMT))) {
 
     Write-CustomLog -ScriptLog $ScriptLog -Message "VMware type VM confirmed, starting install attempt of VMware tools" -Level INFO    
 
@@ -144,7 +121,7 @@ IF ($VMType -eq "VMware, Inc.") {
     $Running = $false
     $iRepeat = 0
 
-    while (-not $Running -and $iRepeat -lt 5) {      
+    while (-not$Running -and $iRepeat -lt 5) {      
 
       Write-CustomLog -ScriptLog $ScriptLog -Message "Pause for 2 seconds to check running state on VMware tools service" -Level INFO
       Start-Sleep -s 2
@@ -191,7 +168,6 @@ IF ($VMType -eq "VMware, Inc.") {
       Write-CustomLog -ScriptLog $ScriptLog -Message "Running re-install of VMware tools install" -Level INFO
     
       #Install VMWare Tools
-
       Start-Process "$CDDrive\hypervisor_drivers\VMware-tools-11.3.5 x64.exe" -ArgumentList '/s /v "/qb REBOOT=R"' -Wait
 
       ### 6 - Re-check again if VMTools service has been installed and is started
@@ -199,7 +175,6 @@ IF ($VMType -eq "VMware, Inc.") {
      Write-CustomLog -ScriptLog $ScriptLog -Message "Re-checking if VMTools service has been installed and is started" -Level INFO 
   
     $iRepeat = 0
-
     while (-not$Running -and $iRepeat -lt 5) {
 
         Start-Sleep -s 2
@@ -215,7 +190,9 @@ IF ($VMType -eq "VMware, Inc.") {
         Else {
 
           $Running = $true
-          Write-CustomLog -ScriptLog $ScriptLog -Message "VMware tools service found to be running state after SECOND install attempt" -Level INFO          
+          Write-CustomLog -ScriptLog $ScriptLog -Message "VMware tools service found to be running state after SECOND install attempt" -Level INFO      
+        
+        }
 
       }
 
