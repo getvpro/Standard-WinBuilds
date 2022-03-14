@@ -1,108 +1,13 @@
 ﻿<#
 
 .FUNCTIONALITY
-First steps after GUI launches on new Win assets built by packer/autonunattend.xml process
+First steps after GUI launches on new Win assets built by autonunattend.xml process
 
 .SYNOPSIS
 Change log
 
-July 23, 2020
--Initial version
-
-July 25, 2020
--Removed WinRM enablement
-
-July 27, 2020
--Amended to support Win 10
-
-Aug 25, 2021
--Added import of PSWindowsUpdate
-
-Nov 25, 2021
--Install PowerShell App Deploy toolkit
--Downloaded PSWindows Update and set as scheduled task
--Setup scheduled task for initial build tasks
--Download and run Optimize-BaseImage
--Replaced reg calls with native Powershell equivalent
-
-Nov 26, 2021
--c:\Scripts changed to c:\Admin\Scripts
--Removed search box from HKCU
-
-Nov 27, 2021
--Additional code to download scripts from github
--Import of Windows Updates PS task
--PSADT used for installation progress
--ServiceUI is downloaded from github
-
-Nov 28, 2021
--Start-Optimized based image no longer launched minimized
--Custom logging added
-
-Nov 29, 2021
--Removed WinRM code @ end
--Exit it not started elevated (admin)
--Environment variables for WinPackerStart/End added
--7-Zip portable download / install
--Fr-Ca language pack download / install
-
-Nov 30, 2021
--c:\Admin\7-Zip is no longer created, as it's covered by .zip extraction
--Updated code to remove Fr-Ca .zip file set
-
-Dec 1, 2021
--Logging method updated to reference new environment variable pushed from autounattend.xml that's only used with packer
--Server manager disable moved to start
--Search window disable moved to start
--c:\Admin\* folders creation moved to start
--RDP/network changes moved to start
--Exit if not started as admin moved to start
--Powershell security changes for TLS 1.2
--Commented out above security changes as part of testing
--Moved $ScriptLog variable before function that uses it
--Created $PackerRegKey
--Above $PackerRegKey resolved issues with $ScriptLog not being read, pause statements removed
-
-Dec 2, 2021
--Code to import Windows update run on boot scheduled task disabled
-
-Dec 4, 2021
--Code to import Windows update run on boot scheduled task re-enabled
--Added code to stop/disable Edge scheduled tasks @ start
--Removed un-needed restart of explorer.exe @ start
--New PS1 /XML Start/Monitor win updates
-
-Dec 5, 2021
--Fixed path on lines 240-245 for XML/PS1 download
-
-Dec 17, 2021
--Added OS detection to support downloads / installs of Fr-CA language pack for both Win 10 / Win 2022
-
-.DESCRIPTION
-Author https://github.com/getvpro (Owen Reynolds)
-
-Jan 05, 2022
--Line 327: Fixed missing * for server OS detection
-
-Jan 06, 2022
--Detection of sys env variable from autounattend.xml to install Fr-Ca lang pack
--Various edits to Show-InstallationProgress
-
-Jan 10, 2022
--Edit to pause for IP check
-
-Jan 11, 2022
--Code added to read in values from StaticIP.csv to deal with non-DHCP enabled environments
--Set-TimeZone -ID "Eastern Standard Time" added @ start to resolve issues with logging
-
-Feb 11, 2022
--Added Fr-CA support for Windows 11 21H1
-
-Feb 13, 2022
--c:\Admin only created as required
-
 March 13, 2022
--New version specifically for offline use
+-New version created from packer based script specifically for offline use
 -Added internet check at end
 -Renamed to Start-PostOSInstall.ps1
 
@@ -111,6 +16,7 @@ March 14, 2022
 -Restart-computer timer set to 30 seconds
 -Updated build log shortcut creation method
 -This PC added to current user
+-XML task copy added
 
 .EXAMPLE
 ./Start-PostOSInstall.ps1
@@ -118,7 +24,7 @@ March 14, 2022
 .NOTES
 
 .Link
-https://github.com/getvpro/Build-Packer
+https://github.com/getvpro/Standard-WinBuilds
 
 #>
 
@@ -316,7 +222,9 @@ start-sleep -s 3
 
 Write-CustomLog -ScriptLog $ScriptLog -Message "Copying over scripts and binaries from ISO temp drive $CDDrive" -Level INFO
 
-GCI "$CDDrive\Scripts" -Filter *.ps1 | Select-Object -ExpandProperty FullName | ForEach {copy-item -Path $_ -Destination C:\Admin\Scripts}
+Get-ChildItem "$CDDrive\Scripts" -Filter *.ps1 | Select-Object -ExpandProperty FullName | ForEach {copy-item -Path $_ -Destination C:\Admin\Scripts -Force}
+
+Get-ChildItem "$CDDrive\Scripts" -Filter *.xml | Select-Object -ExpandProperty FullName | ForEach {copy-item -Path $_ -Destination C:\Admin\Scripts -Force}
 
 copy-item "$CDDrive\Scripts\ServiceUI.exe" C:\Windows\System32 -Force
 
@@ -414,7 +322,7 @@ Else {
     PAUSE
 }
 
-Write-CustomLog -ScriptLog $ScriptLog -Message "Start-FirstSteps script completed, the VM will reboot and auto logon to start windows update processing will close in 30 seconds" -Level INFO
+Write-CustomLog -ScriptLog $ScriptLog -Message "Start-PostOSInstall script completed, the VM will reboot and auto logon to start windows update processing will close in 30 seconds" -Level INFO
 
 start-sleep -s 30
 
