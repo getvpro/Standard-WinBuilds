@@ -110,6 +110,7 @@ March 14, 2022
 -ServiceUI copied over to c:\windows\System32
 -Restart-computer timer set to 30 seconds
 -Updated build log shortcut creation method
+-This PC added to current user
 
 .EXAMPLE
 ./Start-PostOSInstall.ps1
@@ -254,9 +255,15 @@ start-sleep -s 3
 Get-ScheduledTask -TaskName MicrosoftEdgeUpdateTaskMachine* -ErrorAction SilentlyContinue | Stop-ScheduledTask
 Get-ScheduledTask -TaskName MicrosoftEdgeUpdateTaskMachine* -ErrorAction SilentlyContinue | Disable-ScheduledTask
 
+### Create 'this pc' on current users deskop
+
+$path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
+$name="{20D04FE0-3AEA-1069-A2D8-08002B30309D}"
+
 New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer -Name HideDesktopIcons\NewStartPanel
 New-ItemProperty -Path $path -Name $name -Value 0 -Force
 
+### remove server manager from startup for current user
 New-ItemProperty -Path "HKCU:\Software\Microsoft\ServerManager" -Name "DoNotOpenServerManagerAtLogon" -PropertyType DWORD -Value "0x1" –Force
 New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "SearchboxTaskbarMode" -PropertyType DWORD -Value "0x1" -Force
 
