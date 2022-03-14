@@ -17,6 +17,7 @@ March 14, 2022
 -Updated build log shortcut creation method
 -This PC added to current user
 -XML task copy added
+-Creation of c:\Admin\scripts, language pack, build as required
 
 .EXAMPLE
 ./Start-PostOSInstall.ps1
@@ -52,13 +53,9 @@ $CDDrive = Get-CimInstance Win32_LogicalDisk | ?{ $_.DriveType -eq 5} | select-o
 
 ### Create directory structure as required
 
-If (-not(test-path c:\admin -ErrorAction SilentlyContinue)) {
-
-    new-item -ItemType Directory -Path "c:\Admin\Scripts"
-    new-item -ItemType Directory -Path "C:\Admin\Build"
-    new-item -ItemType Directory -Path "C:\Admin\Language Pack"
-
-}
+new-item -ItemType Directory -Path "c:\Admin\Scripts"
+new-item -ItemType Directory -Path "C:\Admin\Build"
+new-item -ItemType Directory -Path "C:\Admin\Language Pack"
 
 # Set log path based on being launched by packer, or not
 
