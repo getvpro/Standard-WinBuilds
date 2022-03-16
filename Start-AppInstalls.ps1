@@ -1,5 +1,7 @@
 ﻿## Script prep
 
+### March 15, 2022: Folder for created scripts launched @ end
+
 if (-not(test-path -Path c:\Admin\Scripts\App_Installs)) {
 
     New-Item -path c:\Admin\Scripts\App_Installs -ItemType Directory
@@ -32,9 +34,6 @@ if (-not(test-path -Path 'c:\Admin\Scripts\App_Installs\Microsoft Edge Business'
 
 Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/JonathanPitre/Apps/master/Microsoft/Edge%20for%20Business/Install.ps1 `
 -OutFile 'c:\Admin\Scripts\App_Installs\Microsoft Edge Business\Install.ps1'
-
-Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/JonathanPitre/Apps/master/Microsoft/Edge%20for%20Business/master_preferences `
--OutFile 'c:\Admin\Scripts\App_Installs\Microsoft Edge Business\master_preferences'
 
 #3 Microsoft OneDrive
 
@@ -121,9 +120,6 @@ if (-not(test-path -Path 'c:\Admin\Scripts\App_Installs\Google Chrome')) {
 Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/JonathanPitre/Apps/master/Google/Chrome%20Enterprise/Install.ps1 `
 -OutFile 'c:\Admin\Scripts\App_Installs\Google Chrome\Install.ps1'
 
-Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/JonathanPitre/Apps/master/Google/Chrome%20Enterprise/master_preferences `
--OutFile 'c:\Admin\Scripts\App_Installs\Google Chrome\master_preferences'
-
 #8 - Citrix VDA
 
 Write-host "Downloading Citrix VDA install scripts for PVS/MCS/Server/Desktop, delete un-needed scripts as required" -ForegroundColor Cyan
@@ -147,3 +143,5 @@ Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/Jonath
 -OutFile 'c:\Admin\Scripts\App_Installs\Citrix VDA\Install-WorkStationPVS-CR.ps1'
 
 #7 - END Citrix VDA
+
+explorer C:\Admin\Scripts\App_Installs
