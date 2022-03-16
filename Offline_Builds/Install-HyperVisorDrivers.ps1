@@ -23,6 +23,9 @@ March 14, 2022
 -Offline version
 -New variable of $VMT used to stop VMware tools from re-installing where it's already installed, mostly for testing script edits
 
+March 15, 2022
+-Set-location used to deal with $CDDrive variable used with '" quotes
+
 .EXAMPLE
 ./Install-HyperVisorDrivers.ps1
 
@@ -213,7 +216,10 @@ IF (($VMType -eq "VMware, Inc.") -and (-not($VMT))) {
 IF ($VMType -eq "Xen") {   
 
     Write-CustomLog -ScriptLog $ScriptLog -Message "Citrix Xen  type VM confirmed, starting install attempt of Citrix XenServer VM Tools" -Level INFO
-    (Start-Process "msiexec.exe" -ArgumentList '/quiet /norestart /i "$CDDrive\hypervisor_drivers\Citrix VM Tools 9.2.1 x64.msi"' -NoNewWindow -Wait -PassThru).ExitCode
+
+    Set-Location "$CDDrive\hypervisor_drivers"
+    
+    (Start-Process "msiexec.exe" -ArgumentList '/quiet /norestart /i "Citrix VM Tools 9.2.1 x64.msi"' -NoNewWindow -Wait -PassThru).ExitCode    
     
 }
 
@@ -224,7 +230,10 @@ IF ($VMType -eq "Xen") {
 IF ($VMType -eq "Nutanix") {   
 
     Write-CustomLog -ScriptLog $ScriptLog -Message "Nutanix type VM confirmed, starting install attempt of Nutanix VirtIO drivers" -Level INFO
-    (Start-Process "msiexec.exe" -ArgumentList '/QB /norestart /i "$CDDrive\hypervisor_drivers\Nutanix-VirtIO-1.1.7-amd64.msi"' -NoNewWindow -Wait -PassThru).ExitCode
+
+    Set-Location "$CDDrive\hypervisor_drivers"
+
+    (Start-Process "msiexec.exe" -ArgumentList '/QB /norestart /i "Nutanix-VirtIO-1.1.7-amd64.msi"' -NoNewWindow -Wait -PassThru).ExitCode    
     
 }
 

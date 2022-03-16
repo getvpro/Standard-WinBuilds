@@ -154,7 +154,9 @@ Get-ScheduledTask -TaskName MicrosoftEdgeUpdateTaskMachine* -ErrorAction Silentl
 $path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
 $name="{20D04FE0-3AEA-1069-A2D8-08002B30309D}"
 
-New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer -Name HideDesktopIcons\NewStartPanel
+New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons
+new-item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons -Name NewStartPanel
+
 New-ItemProperty -Path $path -Name $name -Value 0 -Force
 
 ### remove server manager from startup for current user
