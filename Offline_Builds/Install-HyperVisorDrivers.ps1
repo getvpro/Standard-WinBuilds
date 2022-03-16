@@ -25,6 +25,7 @@ March 14, 2022
 
 March 15, 2022
 -Set-location used to deal with $CDDrive variable used with '" quotes
+-Codew sync for intro cosmetic stuff from Start-PostOSBuild: Setting server manager off/stopping it etc
 
 .EXAMPLE
 ./Install-HyperVisorDrivers.ps1
@@ -107,6 +108,29 @@ Function Write-CustomLog {
         
         Add-content -value "$Message" -Path $ScriptLog
 }
+
+### remove server manager from startup for current user
+New-ItemProperty -Path "HKCU:\Software\Microsoft\ServerManager" -Name "DoNotOpenServerManagerAtLogon" -PropertyType DWORD -Value "0x1" –Force
+New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "SearchboxTaskbarMode" -PropertyType DWORD -Value "0x1" -Force
+
+IF (Get-process "servermanager" -ErrorAction SilentlyContinue) {
+
+    Stop-Process -name servermanager -Force    
+}
+
+New-Item -Path HKLM:\SYSTEM\CurrentControlSet\Control\Network\NewNetworkWindowOff -Force
+
+netsh advfirewall firewall set rule group="Network Discovery" new enable=No
+
+### Open RDP
+netsh advfirewall firewall add rule name="Open Port 3389" dir=in action=allow protocol=TCP localport=3389
+
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -name fDenyTSConnections -PropertyType DWORD -Value 0 -Force
+
+Write-host "Restart explorer"
+
+stop-process -Name explorer
+
 
 
 ### VMware

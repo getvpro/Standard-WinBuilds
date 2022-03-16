@@ -19,6 +19,10 @@ March 14, 2022
 -XML task copy added
 -Creation of c:\Admin\scripts, language pack, build as required
 
+March 15, 2022
+-c:\admin folders only created as required
+-Shortcut to Start-AppInstalls.ps1 is created at end of internet test, but not run in case there are further firewall/network changes required
+
 .EXAMPLE
 ./Start-PostOSInstall.ps1
 
@@ -52,10 +56,23 @@ $PackerStaticIP = (Get-ItemProperty -Path "hklm:\SYSTEM\CurrentControlSet\Contro
 $CDDrive = Get-CimInstance Win32_LogicalDisk | ?{ $_.DriveType -eq 5} | select-object -expandproperty DeviceID
 
 ### Create directory structure as required
+IF (-not(test-path -Path "c:\Admin\Scripts")) {
 
-new-item -ItemType Directory -Path "c:\Admin\Scripts"
-new-item -ItemType Directory -Path "C:\Admin\Build"
-new-item -ItemType Directory -Path "C:\Admin\Language Pack"
+    new-item -ItemType Directory -Path "c:\Admin\Scripts"
+
+}
+
+IF (-not(test-path -Path "c:\Admin\Build")) {
+
+    new-item -ItemType Directory -Path "C:\Admin\Build"
+
+}
+
+IF (-not(test-path -Path "c:\Admin\Language Pack")) {
+
+    new-item -ItemType Directory -Path "C:\Admin\Language Pack"
+
+}
 
 # Set log path based on being launched by packer, or not
 
@@ -320,6 +337,20 @@ Else {
     Write-warning "Basic internet test failed, please check firewall / static IP config / DHCP is recommended for these builds. The next phase requires reqular non firewall / proxy access to windowsupdate.com"
     PAUSE
 }
+
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("$Home\Desktop\Download App Install Scripts.lnk")
+$Shortcut.TargetPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"    
+$Shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "C:\Admin\Scripts\Start-AppInstalls.ps1"'
+$Shortcut.IconLocation = ",0"
+$Shortcut.WindowStyle = 1 #Minimized
+$Shortcut.WorkingDirectory = "C:\Admin\Scripts"
+$Shortcut.Description ="Download App install scripts"
+$Shortcut.Save()
+
+$bytes = [System.IO.File]::ReadAllBytes("$Home\Desktop\Download App Install Scripts.lnk")
+$bytes[0x15] = $bytes[0x15] -bor 0x20 #set byte 21 (0x15) bit 6 (0x20) ON
+[System.IO.File]::WriteAllBytes("$Home\Desktop\Download App Install Scripts.lnk", $bytes)
 
 Write-CustomLog -ScriptLog $ScriptLog -Message "Start-PostOSInstall script completed, the VM will reboot and auto logon to start windows update processing will close in 30 seconds" -Level INFO
 
