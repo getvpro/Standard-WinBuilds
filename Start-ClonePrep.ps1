@@ -47,6 +47,9 @@ March 10, 2022
 -SCCM edit as per https://support.citrix.com/article/CTX238513
 -Removed references to Win 10
 
+March 18, 2022
+-If statement added for SCCM reset
+
 .DESCRIPTION
 Author oreynolds@gmail.com
 
@@ -72,7 +75,7 @@ Else {
 }
 
 ### Change per environment here
-$CTXBuildIDName = "NACTXBUILD"
+$CTXBuildIDName = $Env:userName
 
 ###
 $ErrorActionPreference = "SilentlyContinue"
@@ -276,6 +279,8 @@ IF (Get-Service -Name AppVClient -ErrorAction $ErrorActionPreference) {
 ### https://www.carlstalhood.com/workspace-environment-management/
 IF (Get-service -Name WemAgentSVC -ErrorAction SilentlyContinue) {
 
+    Write-CustomLog -Message "Running reset of WEM cache" -Level INFO -ScriptLog $ScriptLog
+
     Stop-Service -Name WemAgentSVC -force
 
     Stop-Service -Name WemLogonSVC -force
@@ -293,10 +298,16 @@ IF (Get-service -Name WemAgentSVC -ErrorAction SilentlyContinue) {
 
 }
 
-Stop-Service -Name CcmExec -Force
-Remove-Item -Path $env:windir\smscfg.ini -Force
-Remove-Item -Path HKLM:\Software\Microsoft\SystemCertificates\SMS\Certificates\* -Force
-cmd.exe /c 'wmic /namespace:\\root\ccm\invagt path inventoryActionStatus where InventoryActionID="{00000000-0000-0000-0000-000000000001}" DELETE /NOINTERACTIVE'
+IF (Get-service -Name CcmExec -ErrorAction SilentlyContinue) {
+
+    Write-CustomLog -Message "Running reset of SCCM for non-persistent machines" -Level INFO -ScriptLog $ScriptLog
+
+    Stop-Service -Name CcmExec -Force
+    Remove-Item -Path $env:windir\smscfg.ini -Force
+    Remove-Item -Path HKLM:\Software\Microsoft\SystemCertificates\SMS\Certificates\* -Force
+    cmd.exe /c 'wmic /namespace:\\root\ccm\invagt path inventoryActionStatus where InventoryActionID="{00000000-0000-0000-0000-000000000001}" DELETE /NOINTERACTIVE'
+
+}
 
 Write-CustomLog -Message "End of Windows clone $BuildEnv script processing @ $shortDate" -Level INFO -ScriptLog $ScriptLog
 Write-CustomLog -Message "Software installation is now completed. The computer $env:ComputerName will shutdown in 30 seconds!" -Level INFO -ScriptLog $ScriptLog
