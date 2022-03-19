@@ -23,6 +23,11 @@ March 15, 2022
 -c:\admin folders only created as required
 -Shortcut to Start-AppInstalls.ps1 is created at end of internet test, but not run in case there are further firewall/network changes required
 
+March 19, 2022
+-Read-only property removed from items copied from CDROM
+-Added function to set wallpaper from my man Jose Espitia: https://www.joseespitia.com/2017/09/15/set-wallpaper-powershell-function
+-Server 2019 lang pack supported added
+
 .EXAMPLE
 ./Start-PostOSInstall.ps1
 
@@ -123,6 +128,86 @@ Function Write-CustomLog {
         
         Add-content -value "$Message" -Path "$ScriptLog"
 }
+
+Function Set-WallPaper {
+ 
+<#
+ 
+    .SYNOPSIS
+    Applies a specified wallpaper to the current user's desktop
+    
+    .PARAMETER Image
+    Provide the exact path to the image
+ 
+    .PARAMETER Style
+    Provide wallpaper style (Example: Fill, Fit, Stretch, Tile, Center, or Span)
+  
+    .EXAMPLE
+    Set-WallPaper -Image "C:\Wallpaper\Default.jpg"
+    Set-WallPaper -Image "C:\Wallpaper\Background.jpg" -Style Fit
+  
+#>
+ 
+param (
+    [parameter(Mandatory=$True)]
+    # Provide path to image
+    [string]$Image,
+    # Provide wallpaper style that you would like applied
+    [parameter(Mandatory=$False)]
+    [ValidateSet('Fill', 'Fit', 'Stretch', 'Tile', 'Center', 'Span')]
+    [string]$Style
+)
+ 
+$WallpaperStyle = Switch ($Style) {
+  
+    "Fill" {"10"}
+    "Fit" {"6"}
+    "Stretch" {"2"}
+    "Tile" {"0"}
+    "Center" {"0"}
+    "Span" {"22"}
+  
+}
+ 
+If($Style -eq "Tile") {
+ 
+    New-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name WallpaperStyle -PropertyType String -Value $WallpaperStyle -Force
+    New-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name TileWallpaper -PropertyType String -Value 1 -Force
+ 
+}
+Else {
+ 
+    New-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name WallpaperStyle -PropertyType String -Value $WallpaperStyle -Force
+    New-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name TileWallpaper -PropertyType String -Value 0 -Force
+ 
+}
+ 
+Add-Type -TypeDefinition @" 
+using System; 
+using System.Runtime.InteropServices;
+  
+public class Params
+{ 
+    [DllImport("User32.dll",CharSet=CharSet.Unicode)] 
+    public static extern int SystemParametersInfo (Int32 uAction, 
+                                                   Int32 uParam, 
+                                                   String lpvParam, 
+                                                   Int32 fuWinIni);
+}
+"@ 
+  
+    $SPI_SETDESKWALLPAPER = 0x0014
+    $UpdateIniFile = 0x01
+    $SendChangeEvent = 0x02
+  
+    $fWinIni = $UpdateIniFile -bor $SendChangeEvent
+  
+    $ret = [Params]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $Image, $fWinIni)
+}
+
+### Functions
+
+Set-WallPaper -Image "C:\Admin\tetris_build_wallpaper.jpg" -Style Fit
 
 ### Part 1 - Start of script processing, first steps, requires no internet connection
 
@@ -238,11 +323,19 @@ start-sleep -s 3
 
 Write-CustomLog -ScriptLog $ScriptLog -Message "Copying over scripts and binaries from ISO temp drive $CDDrive" -Level INFO
 
-Get-ChildItem "$CDDrive\Scripts" -Filter *.ps1 | Select-Object -ExpandProperty FullName | ForEach {copy-item -Path $_ -Destination C:\Admin\Scripts -Force}
+Get-ChildItem "$CDDrive\Scripts" -Filter *.ps1 | Select-Object -ExpandProperty FullName | ForEach {
 
-Get-ChildItem "$CDDrive\Scripts" -Filter *.xml | Select-Object -ExpandProperty FullName | ForEach {copy-item -Path $_ -Destination C:\Admin\Scripts -Force}
+    copy-item -Path $_ -Destination C:\Admin\Scripts -Force -PassThru | Set-ItemProperty -name isreadonly -Value $false
 
-copy-item "$CDDrive\Scripts\ServiceUI.exe" C:\Windows\System32 -Force
+}
+
+Get-ChildItem "$CDDrive\Scripts" -Filter *.xml | Select-Object -ExpandProperty FullName | ForEach {
+
+    copy-item -Path $_ -Destination C:\Admin\Scripts -Force -PassThru | Set-ItemProperty -name isreadonly -Value $false
+
+}
+
+copy-item "$CDDrive\Scripts\ServiceUI.exe" C:\Windows\System32 -Force -PassThru | Set-ItemProperty -name isreadonly -Value $false
 
 set-location C:\admin\Scripts
 
@@ -256,11 +349,6 @@ Write-CustomLog -ScriptLog $ScriptLog -Message "Importing Windows Update task" -
 Register-ScheduledTask -XML (Get-content "C:\Admin\Scripts\Start-WinUpdates.xml" | Out-String) -TaskName Start-WinUpdates -Force
 
 Register-ScheduledTask -XML (Get-content "C:\Admin\Scripts\Monitor-WinUpdates.xml" | Out-String) -TaskName Monitor-WinUpdates -Force
-
-$WshShell = New-Object -comObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\desktop\BuildLogs.lnk")
-$Shortcut.TargetPath = "C:\Admin\Build"
-$Shortcut.Save()
 
 ### Fr-ca language pack download for Server 2022 systems / Win 10 21H1 is pending
 
@@ -295,9 +383,21 @@ If ($FrenchCaLangPack -eq 1) {
 		$OldList.Add("fr-CA")
 		Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
     
-    }    
+    }
 
-    IF ($OS -like "*Windows Server*") {
+    IF ($OS -like "*Microsoft Windows Server 2019*") {
+
+        Add-WindowsPackage -Online -PackagePath "$CDDrive\langpack\Server-2019-x64-Fr-Ca.cab" -LogPath "C:\admin\Build\Fr-ca-Install.log" -NoRestart
+        
+        Write-CustomLog -ScriptLog $ScriptLog -Message "Adding Fr-Ca to preferred display languages" -Level INFO
+
+		$OldList = Get-WinUserLanguageList
+		$OldList.Add("fr-CA")
+		Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
+    
+    }
+
+    IF ($OS -like "*Microsoft Windows Server 2022*") {
 
         Add-WindowsPackage -Online -PackagePath "$CDDrive\langpack\Server-2022-x64-Fr-Ca.cab" -LogPath "C:\admin\Build\Fr-ca-Install.log" -NoRestart
         
@@ -338,6 +438,16 @@ Else {
     PAUSE
 }
 
+### Desktop shortcut creation for build account
+
+## Shortcut creations
+## 1 Build logs
+$WshShell = New-Object -comObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\desktop\BuildLogs.lnk")
+$Shortcut.TargetPath = "C:\Admin\Build"
+$Shortcut.Save()
+
+## 2 App installs script
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut("$Home\Desktop\Download App Install Scripts.lnk")
 $Shortcut.TargetPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"    
@@ -347,10 +457,23 @@ $Shortcut.WindowStyle = 1 #Minimized
 $Shortcut.WorkingDirectory = "C:\Admin\Scripts"
 $Shortcut.Description ="Download App install scripts"
 $Shortcut.Save()
-
 $bytes = [System.IO.File]::ReadAllBytes("$Home\Desktop\Download App Install Scripts.lnk")
 $bytes[0x15] = $bytes[0x15] -bor 0x20 #set byte 21 (0x15) bit 6 (0x20) ON
 [System.IO.File]::WriteAllBytes("$Home\Desktop\Download App Install Scripts.lnk", $bytes)
+
+## 3 Reboot now
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("$Home\Desktop\REBOOT NOW!.lnk")
+$Shortcut.TargetPath = "C:\Windows\System32\cmd.exe"
+$Shortcut.Arguments = 'C:\Windows\System32\cmd.exe /c shutdown -r -f -t 10'
+$Shortcut.IconLocation = ",0"
+$Shortcut.WindowStyle = 1 #Minimized
+$Shortcut.WorkingDirectory = "C:\Windows\System32"
+$Shortcut.Description ="REBOOT PC AFTER 10 SECONDS"
+$Shortcut.Save()
+$bytes = [System.IO.File]::ReadAllBytes("$Home\Desktop\REBOOT NOW!.lnk")
+$bytes[0x15] = $bytes[0x15] -bor 0x20 #set byte 21 (0x15) bit 6 (0x20) ON
+[System.IO.File]::WriteAllBytes("$Home\Desktop\REBOOT NOW!.lnk", $bytes)
 
 Write-CustomLog -ScriptLog $ScriptLog -Message "Start-PostOSInstall script completed, the VM will reboot and auto logon to start windows update processing will close in 30 seconds" -Level INFO
 
