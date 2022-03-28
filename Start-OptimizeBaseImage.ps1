@@ -17,6 +17,10 @@ Nov 28, 2021
 -Updated path for teams JSON 
 -Added silent exit on error
 
+March 28, 2022
+-French for default users when FrCA key detected
+-Win 11 RSAT 
+
 #> 
 
 IF (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -99,6 +103,7 @@ $ProgressPreference = "SilentlyContinue"
 $ErrorActionPreference = "SilentlyContinue"
 $env:SEE_MASK_NOZONECHECKS = 1
 $appScriptDirectory = Get-ScriptDirectory
+$FrenchCaLangPack = (Get-ItemProperty -Path "hklm:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name FrenchCaLangPack -ErrorAction SilentlyContinue).FrenchCaLangPack
 
 # Application related
 ##*===============================================
@@ -117,7 +122,7 @@ Set-RegistryKey -Key "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" -Name
 Set-RegistryKey -Key "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableFirstLogonAnimation" -Type REG_DWORD -Value 0
 
 ### Update / create c:\Admin folder
-write-host "Copying logon script to c:\Scripts" -foregroundcolor cyan
+write-host "Create c:\admin folder as required" -foregroundcolor cyan
 IF (!(test-path c:\Admin)) {new-item c:\Admin -Type Directory}
 
 ### Windows server - Adding RSAT roles
@@ -152,9 +157,9 @@ IF ((Get-WMIObject -class win32_operatingsystem).Caption -like "*Server*") {
 
 }
 
-### Install RSAT roles on Win 10
+### Install RSAT roles on Win 10/Win11
 
-IF ((Get-WmiObject -class win32_operatingsystem).Caption -like "*Windows 10*") {
+IF ((Get-WmiObject -class win32_operatingsystem).Caption -like "*Windows 1*") {
 
     $Roles = @(
     "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0"
@@ -208,6 +213,7 @@ IF ($Drive.Label -ne $env:COMPUTERNAME) {
 
 Add-Type -AssemblyName System.Windows.Forms
 
+<#
 If (((Get-WinUserLanguageList).LanguageTag | Measure | Select-object -expandProperty Count) -eq 2) {
 
     If ((Get-WinUserLanguageList).LanguageTag -contains "Fr-ca") {
@@ -219,6 +225,8 @@ If (((Get-WinUserLanguageList).LanguageTag | Measure | Select-object -expandProp
     }
 
 }
+
+#>
 
 Get-Process -Name $appProcesses | Stop-Process -Force
 Set-Location -Path $appScriptDirectory
@@ -251,7 +259,7 @@ Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersio
 
 ### Language options, only set based on two or more languages being detected as previously installed, see LINE 200
 
-If ($UserResponse -eq "Yes") {
+If ($FrenchCaLangPack -eq 1) {
 
     # Set display language
     Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "PreferredUILanguages" -Type MultiString -Value "fr-CA"
@@ -268,7 +276,8 @@ If ($UserResponse -eq "Yes") {
     Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile\fr-CA" -Name "CachedLanguageName" -Type String -Value "@Winlangdb.dll,-1160"
 
     # Set display locale
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "Locale" -Type String -Value "00000C0C"
+    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "Locale" -Type String -Value "00000409" #US
+    
     Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "LocaleName" -Type String -Value "fr-CA"
 
     # Set Country
@@ -290,11 +299,7 @@ If ($UserResponse -eq "Yes") {
     # Set French (Canada) - Canadian French keyboard layout
     Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Preload" -Name "1" -Type String -Value "00000c0c"
     Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Substitutes" -Name "00000c0c" -Type String -Value "00001009"
-
-    # Set English (Canada) - US keyboard layout
-    #Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Preload" -Name "2" -Type String -Value "00001009"
-    #Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Substitutes" -Name "00001009" -Type String -Value "00000409"
-
+    
     # Disable input language switch hotkey -https://windowsreport.com/windows-10-switches-keyboard-language
     Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Toggle" -Name "Hotkey" -Type DWord -Value "3"
     Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Toggle" -Name "Language Hotkey" -Type DWord -Value "3"
@@ -591,4 +596,4 @@ Remove-Item -Path "$envSystemDrive\Users\Default\*.regtrans-ms" -Force
 # Remove Server Manager link
 Remove-File -Path "$envSystemDrive\Users\Default\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\Server Manager.lnk" -ContinueOnError $True
 
-Write-Log -Message "The default user profile was optimized!" -LogType 'CMTrace' -WriteHost $True
+Write-Log -Message "The optimize base image script completed" -LogType 'CMTrace' -WriteHost $True
