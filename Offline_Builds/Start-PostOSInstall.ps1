@@ -28,6 +28,10 @@ March 19, 2022
 -Added function to set wallpaper from my man Jose Espitia: https://www.joseespitia.com/2017/09/15/set-wallpaper-powershell-function
 -Server 2019 lang pack supported added
 
+March 27, 2022
+-Updated wallpaper code
+-Re-added optimize base image script
+
 .EXAMPLE
 ./Start-PostOSInstall.ps1
 
@@ -207,7 +211,9 @@ public class Params
 
 ### Functions
 
-Set-WallPaper -Image "C:\Admin\tetris_build_wallpaper.jpg" -Style Fit
+### Wallpaper
+copy-item "$CDDrive\Scripts\tetris_build_wallpaper.jpg" -Destination C:\Admin\Scripts -Force -PassThru | Set-ItemProperty -name isreadonly -Value $false
+Set-WallPaper -Image "C:\Admin\scripts\tetris_build_wallpaper.jpg" -Style Fit
 
 ### Part 1 - Start of script processing, first steps, requires no internet connection
 
@@ -339,11 +345,6 @@ copy-item "$CDDrive\Scripts\ServiceUI.exe" C:\Windows\System32 -Force -PassThru 
 
 set-location C:\admin\Scripts
 
-Write-CustomLog -ScriptLog $ScriptLog -Message "Running Optimize Base image script" -Level INFO
-
-### Requires additional edits to remove use of PSADT - March 13, 2022
-#powershell.exe -executionpolicy bypass -file .\Start-OptimizeBaseImage.ps1
-
 Write-CustomLog -ScriptLog $ScriptLog -Message "Importing Windows Update task" -Level INFO
 
 Register-ScheduledTask -XML (Get-content "C:\Admin\Scripts\Start-WinUpdates.xml" | Out-String) -TaskName Start-WinUpdates -Force
@@ -355,13 +356,12 @@ Register-ScheduledTask -XML (Get-content "C:\Admin\Scripts\Monitor-WinUpdates.xm
 If ($FrenchCaLangPack -eq 1) {
 
     Write-CustomLog -ScriptLog $ScriptLog -Message "FrenchCaLangPack key is set to 1, proceeeding with extra steps to provision Fr-Ca lang pack" -Level INFO
+    
     Set-Location 'C:\Admin\Language Pack'    
 
     Write-CustomLog -ScriptLog $ScriptLog -Message "Installing Fr-ca.cab, this process can be up to 10 mins" -Level INFO
     
-    IF ($OS -like "*Windows 10*") {
-
-    
+    IF ($OS -like "*Windows 10*") {    
 
         Add-WindowsPackage -Online -PackagePath "$CDDrive\langpack\Win10-21H1-x64-Fr-Ca.cab" -LogPath "C:\admin\Build\Fr-ca-Install.log" -NoRestart
         
@@ -437,6 +437,15 @@ Else {
     Write-warning "Basic internet test failed, please check firewall / static IP config / DHCP is recommended for these builds. The next phase requires reqular non firewall / proxy access to windowsupdate.com"
     PAUSE
 }
+
+### Requires additional edits to remove use of PSADT - March 13, 2022
+
+
+
+Write-CustomLog -ScriptLog $ScriptLog -Message "Running Optimize Base image script" -Level INFO
+
+set-location C:\admin\Scripts
+powershell.exe -executionpolicy bypass -file .\Start-OptimizeBaseImage.ps1
 
 ### Desktop shortcut creation for build account
 
