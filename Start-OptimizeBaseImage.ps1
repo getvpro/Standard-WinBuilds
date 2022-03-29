@@ -1,81 +1,29 @@
 ﻿<#
 .FUNCTIONALITY
--Runs various post install steps on Win 10 / Win 201x golden images
+-Runs default user best practices for non-persisent workloads
 -Includes code from https://raw.githubusercontent.com/JonathanPitre/Scripts/master/Default%20User%20Profile/Optimize-DefaultUserProfile.ps1
 
 .SYNOPSIS
--Runs various post install steps on Win 10 / Win 201x golden images
+-Runs default user best practices for non-persisent workloads
 -Includes code from https://raw.githubusercontent.com/JonathanPitre/Scripts/master/Default%20User%20Profile/Optimize-DefaultUserProfile.ps1
 
 .NOTES
 Change log
 
-Oct 5, 2021
-- New consolidated version for use with new client Win 201x / Win 10 golden image builds
-
-Nov 28, 2021
--Updated path for teams JSON 
--Added silent exit on error
-
 March 28, 2022
--French for default users when FrCA key detected
--Win 11 RSAT 
+-French only when line 25 FrCA = 1
+-Consolidated with Jon's most recent script
 
 #> 
 
-IF (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-
-    write-warning "not started as elevated session, exiting"
-    EXIT
-
-}
-
-# Custom package providers list
-$PackageProviders = @("Nuget")
-
-# Custom modules list
-$Modules = @("PSADT")
-
-Write-Verbose -Message "Importing custom modules..." -Verbose
-
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
+$ProgressPreference = "SilentlyContinue"
+$ErrorActionPreference = "SilentlyContinue"
+$env:SEE_MASK_NOZONECHECKS = 1
+$Modules = @("PSADT") # Modules list
+$FrenchCaLangPack = (Get-ItemProperty -Path "hklm:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name FrenchCaLangPack -ErrorAction SilentlyContinue).FrenchCaLangPack
 
-# Install custom package providers list
-Foreach ($PackageProvider in $PackageProviders)
-{
-    If (-not(Get-PackageProvider -ListAvailable -Name $PackageProvider -ErrorAction SilentlyContinue)) { Install-PackageProvider -Name $PackageProvider -Force }
-}
-
-# Add the Powershell Gallery as trusted repository
-Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
-
-# Update PowerShellGet
-$InstalledPSGetVersion = (Get-PackageProvider -Name PowerShellGet).Version
-$PSGetVersion = [version](Find-PackageProvider -Name PowerShellGet).Version
-If ($PSGetVersion -gt $InstalledPSGetVersion) { Install-PackageProvider -Name PowerShellGet -Force }
-
-# Install and import custom modules list
-Foreach ($Module in $Modules)
-{
-    If (-not(Get-Module -ListAvailable -Name $Module)) { Install-Module -Name $Module -AllowClobber -Force | Import-Module -Name $Module -Force }
-    Else
-    {
-        $InstalledModuleVersion = (Get-InstalledModule -Name $Module).Version
-        $ModuleVersion = (Find-Module -Name $Module).Version
-        $ModulePath = (Get-InstalledModule -Name $Module).InstalledLocation
-        $ModulePath = (Get-Item -Path $ModulePath).Parent.FullName
-        If ([version]$ModuleVersion -gt [version]$InstalledModuleVersion)
-        {
-            Update-Module -Name $Module -Force
-            Remove-Item -Path $ModulePath\$InstalledModuleVersion -Force -Recurse
-        }
-    }
-}
-
-Write-Verbose -Message "Custom modules were successfully imported!" -Verbose
-
-# Get the current script directory
 Function Get-ScriptDirectory
 {
     Remove-Variable appScriptDirectory
@@ -86,147 +34,113 @@ Function Get-ScriptDirectory
         ElseIf ($PSScriptRoot) { $PSScriptRoot } # Windows PowerShell 3.0-5.1
         Else
         {
-            Write-Host -ForegroundColor Red "Cannot resolve script file's path"
+            Write-Host -Object "Cannot resolve script file's path" -ForegroundColor Red
             Exit 1
         }
     }
     Catch
     {
-        Write-Host -ForegroundColor Red "Caught Exception: $($Error[0].Exception.Message)"
+        Write-Host -Object "Caught Exception: $($Error[0].Exception.Message)" -ForegroundColor Red
         Exit 2
     }
 }
 
-# Variables Declaration
-# Generic
-$ProgressPreference = "SilentlyContinue"
-$ErrorActionPreference = "SilentlyContinue"
-$env:SEE_MASK_NOZONECHECKS = 1
-$appScriptDirectory = Get-ScriptDirectory
-$FrenchCaLangPack = (Get-ItemProperty -Path "hklm:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name FrenchCaLangPack -ErrorAction SilentlyContinue).FrenchCaLangPack
+Function Initialize-Module
+{
+    [CmdletBinding()]
+    Param
+    (
+        [Parameter(Mandatory = $true)]
+        [string]$Module
+    )
+    Write-Host -Object  "Importing $Module module..." -ForegroundColor Green
 
-# Application related
-##*===============================================
+    # If module is imported say that and do nothing
+    If (Get-Module | Where-Object {$_.Name -eq $Module})
+    {
+        Write-Host -Object  "Module $Module is already imported." -ForegroundColor Green
+    }
+    Else
+    {
+        # If module is not imported, but available on disk then import
+        If (Get-Module -ListAvailable | Where-Object {$_.Name -eq $Module})
+        {
+            $InstalledModuleVersion = (Get-InstalledModule -Name $Module).Version
+            $ModuleVersion = (Find-Module -Name $Module).Version
+            $ModulePath = (Get-InstalledModule -Name $Module).InstalledLocation
+            $ModulePath = (Get-Item -Path $ModulePath).Parent.FullName
+            If ([version]$ModuleVersion -gt [version]$InstalledModuleVersion)
+            {
+                Update-Module -Name $Module -Force
+                Remove-Item -Path $ModulePath\$InstalledModuleVersion -Force -Recurse
+                Write-Host -Object "Module $Module was updated." -ForegroundColor Green
+            }
+            Import-Module -Name $Module -Force -Global -DisableNameChecking
+            Write-Host -Object "Module $Module was imported." -ForegroundColor Green
+        }
+        Else
+        {
+            # Install Nuget
+            If (-not(Get-PackageProvider -ListAvailable -Name NuGet))
+            {
+                Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+                Write-Host -Object "Package provider NuGet was installed." -ForegroundColor Green
+            }
+
+            # Add the Powershell Gallery as trusted repository
+            If ((Get-PSRepository -Name "PSGallery").InstallationPolicy -eq "Untrusted")
+            {
+                Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+                Write-Host -Object "PowerShell Gallery is now a trusted repository." -ForegroundColor Green
+            }
+
+            # Update PowerShellGet
+            $InstalledPSGetVersion = (Get-PackageProvider -Name PowerShellGet).Version
+            $PSGetVersion = [version](Find-PackageProvider -Name PowerShellGet).Version
+            If ($PSGetVersion -gt $InstalledPSGetVersion)
+            {
+                Install-PackageProvider -Name PowerShellGet -Force
+                Write-Host -Object "PowerShellGet Gallery was updated." -ForegroundColor Green
+            }
+
+            # If module is not imported, not available on disk, but is in online gallery then install and import
+            If (Find-Module -Name $Module | Where-Object {$_.Name -eq $Module})
+            {
+                # Install and import module
+                Install-Module -Name $Module -AllowClobber -Force -Scope AllUsers
+                Import-Module -Name $Module -Force -Global -DisableNameChecking
+                Write-Host -Object "Module $Module was installed and imported." -ForegroundColor Green
+            }
+            Else
+            {
+                # If the module is not imported, not available and not in the online gallery then abort
+                Write-Host -Object "Module $Module was not imported, not available and not in an online gallery, exiting." -ForegroundColor Red
+                EXIT 1
+            }
+        }
+    }
+}
+
+# Get the current script directory
+$appScriptDirectory = Get-ScriptDirectory
+
+# Install and import modules list
+Foreach ($Module in $Modules)
+{
+    Initialize-Module -Module $Module
+}
+
+#-----------------------------------------------------------[Functions]------------------------------------------------------------
+
+#----------------------------------------------------------[Declarations]----------------------------------------------------------
+
 $appProcesses = @("regedit", "reg")
 $appTeamsConfigURL = "https://raw.githubusercontent.com/JonathanPitre/Apps/master/Microsoft/Teams/desktop-config.json"
 $appTeamsConfig = Split-Path -Path $appTeamsConfigURL -Leaf
-$NewUserScript = "\\$env:USERDNSDOMAIN\NETLOGON\NewUserProfile\Set-NewUserProfile.ps1" # Modify according to your environment
-##*===============================================
+$NewUserScript = "\\$envMachineADDomain\NETLOGON\Citrix\NewUserProfile\Set-NewUserProfile.ps1" # Modify according to your environment
 
-### Remove Windows welcome for new accounts
+#-----------------------------------------------------------[Execution]------------------------------------------------------------
 
-Set-RegistryKey -Key "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" -Name "PrivacyConsentStatus" -Type REG_DWORD -Value 1
-Set-RegistryKey -Key "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" -Name "SkipMachineOOBE" -Type REG_DWORD -Value 1
-Set-RegistryKey -Key "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" -Name "ProtectYourPC" -Type REG_DWORD -Value  3
-Set-RegistryKey -Key "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" -Name "SkipUserOOBE" -Type REG_DWORD -Value  1
-Set-RegistryKey -Key "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableFirstLogonAnimation" -Type REG_DWORD -Value 0
-
-### Update / create c:\Admin folder
-write-host "Create c:\admin folder as required" -foregroundcolor cyan
-IF (!(test-path c:\Admin)) {new-item c:\Admin -Type Directory}
-
-### Windows server - Adding RSAT roles
-
-IF ((Get-WMIObject -class win32_operatingsystem).Caption -like "*Server*") {
-
-    write-host "Windows server OS confirmed, proceeding with windows feature changes" -ForegroundColor cyan
-
-    IF ((Get-WindowsFeature RSAT-DHCP).Installed -eq $False) {
-
-        write-host "Installing DHCP remote admin role" -ForegroundColor cyan
-        Install-WindowsFeature RSAT-DHCP
-    }
-
-    IF ((Get-WindowsFeature RSAT-DNS-Server).Installed -eq $False) {
-
-        write-host "Installing DNS remote admin feature"
-        Install-WindowsFeature RSAT-DNS-Server
-    }
-
-    IF ((Get-WindowsFeature RSAT-AD-Tools).Installed -eq $False) {
-
-        write-host "Installing AD remote admin feature"
-        Install-WindowsFeature RSAT-AD-Tools
-    }
-
-    IF ((Get-WindowsFeature GPMC).Installed -eq $False) {
-
-        write-host "Installing GPMC remote admin feature"
-        Install-WindowsFeature GPMC
-    }
-
-}
-
-### Install RSAT roles on Win 10/Win11
-
-IF ((Get-WmiObject -class win32_operatingsystem).Caption -like "*Windows 1*") {
-
-    $Roles = @(
-    "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0"
-    "Rsat.DHCP.Tools~~~~0.0.1.0"
-    "Rsat.Dns.Tools~~~~0.0.1.0"    
-    "Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0"
-    "Rsat.ServerManager.Tools~~~~0.0.1.0"
-    )
-
-    ForEach ($Item in $Roles) {
-
-        IF ((Get-WindowsCapability -name $Item -Online).State -eq "NotPresent") {
-
-            write-host "Adding $Item"    
-            Add-WindowsCapability -Online -name $Item
-
-        }
-
-        Else {
-
-            write-host "$Item is already installed, no action taken" -ForegroundColor Cyan
-
-        }
-
-    }
-
-}
-
-### Set High-perf powerprofile if not laptop type
-
-If (!(Get-WmiObject -Class win32_battery)) {
-
-    write-host "Asset is not a laptop, setting power profile to high performance"
-    write-host "`r`n"
-    powercfg.exe -SETACTIVE "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
-}
-
-### Change C drive name to match $Env:Computername
-IF ($Drive.Label -ne $env:COMPUTERNAME) {
-
-    write-host "Change C drive name to match $Env:Computername" -ForegroundColor Cyan
-    write-host "`r`n"
-
-    $drive = Get-WMIObject win32_volume -Filter "DriveLetter = 'C:'"
-    $drive.Label = $env:COMPUTERNAME
-    $drive.put()
-
-}
-
-### Default user changes
-
-Add-Type -AssemblyName System.Windows.Forms
-
-<#
-If (((Get-WinUserLanguageList).LanguageTag | Measure | Select-object -expandProperty Count) -eq 2) {
-
-    If ((Get-WinUserLanguageList).LanguageTag -contains "Fr-ca") {
-
-        $language = "French"
-        $messageBoxTitle = "Set default user profile language choice"
-        $UserResponse = [System.Windows.Forms.MessageBox]::Show("Do you want to set multi-language system to $language ?",$messageBoxTitle , 4, 32)
-
-    }
-
-}
-
-#>
 
 Get-Process -Name $appProcesses | Stop-Process -Force
 Set-Location -Path $appScriptDirectory
@@ -235,11 +149,12 @@ Set-Location -Path $appScriptDirectory
 Write-Log -Message "Saving a Default User registry hive copy..." -Severity 1 -LogType CMTrace -WriteHost $True
 If (-Not(Test-Path -Path "$envSystemDrive\Users\Default\NTUSER.DAT.bak"))
 {
-    Copy-File -Path "$envSystemDrive\Users\Default\NTUSER.DAT" -Destination "$appScriptDirectory\NTUSER.DAT.BAK" -ContinueFileCopyOnError
+    Copy-File -Path "$envSystemDrive\Users\Default\NTUSER.DAT" -Destination "$appScriptDirectory\NTUSER.DAT.BAK"
 }
 
 # Load the Default User registry hive
 Write-Log -Message "Loading the Default User registry hive..." -Severity 1 -LogType CMTrace -WriteHost $True
+Start-Sleep -Seconds 5
 Execute-Process -Path "$envWinDir\System32\reg.exe" -Parameters "LOAD HKLM\DefaultUser $envSystemDrive\Users\Default\NTUSER.DAT" -WindowStyle Hidden
 
 # Set Sounds scheme to none
@@ -257,69 +172,74 @@ Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Sound" -Name "ExtendedSoun
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Group Policy\State" -Name "NextRefreshReason" -Type DWord -Value "0"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Group Policy\State" -Name "NextRefreshMode" -Type DWord -Value "2"
 
-### Language options, only set based on two or more languages being detected as previously installed, see LINE 200
+if ($FrenchCaLangPack -eq 1) {
 
-If ($FrenchCaLangPack -eq 1) {
+	# Set display language
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "PreferredUILanguages" -Type MultiString -Value "fr-CA"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "PreviousPreferredUILanguages" -Type MultiString -Value "en-US"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop\MuiCached" -Name "MachinePreferredUILanguages" -Type MultiString -Value "en-US"
+	Remove-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Recurse -ContinueOnError $True
+	Remove-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile System Backup" -Recurse -ContinueOnError $True
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "InputMethodOverride" -Type String -Value "0C0C:00001009"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "Languages" -Type MultiString -Value "fr-CA en-US"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "ShowAutoCorrection" -Type DWord -Value "1"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "ShowCasing" -Type DWord -Value "1"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "ShowShiftLock" -Type DWord -Value "1"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "ShowTextPrediction" -Type DWord -Value "1"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile\en-US" -Name "0409:00000409" -Type DWord -Value "1"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile\en-US" -Name "CachedLanguageName" -Type String -Value "@Winlangdb.dll,-1121"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile\fr-CA" -Name "0C0C:00001009" -Type DWord -Value "1"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile\fr-CA" -Name "CachedLanguageName" -Type String -Value "@Winlangdb.dll,-1160"
 
-    # Set display language
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "PreferredUILanguages" -Type MultiString -Value "fr-CA"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "PreferredUILanguagesPending" -Type MultiString -Value "fr-CA"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop\MuiCached" -Name "MachinePreferredUILanguages" -Type MultiString -Value "en-US"
-    Remove-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Recurse -ContinueOnError $True
-    Remove-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile System Backup" -Recurse -ContinueOnError $True
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "Languages" -Type MultiString -Value "fr-CA"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "ShowAutoCorrection" -Type DWord -Value "1"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "ShowCasing" -Type DWord -Value "1"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "ShowShiftLock" -Type DWord -Value "1"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile" -Name "ShowTextPrediction" -Type DWord -Value "1"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile\fr-CA" -Name "0C0C:00001009" -Type DWord -Value "1"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\User Profile\fr-CA" -Name "CachedLanguageName" -Type String -Value "@Winlangdb.dll,-1160"
+	# Set display locale
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "Locale" -Type String -Value "00000C0C"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "LocaleName" -Type String -Value "fr-CA"
 
-    # Set display locale
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "Locale" -Type String -Value "00000409" #US
-    
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "LocaleName" -Type String -Value "fr-CA"
+	# Set Country
+	# https://www.robvanderwoude.com/icountry.php
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "iCountry" -Type String -Value "2"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sCountry" -Type String -Value "Canada"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sLanguage" -Type String -Value "FRC"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\Geo" -Name "Name" -Type String -Value "CA"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\Geo" -Name "Nation" -Type String -Value "39"
 
-    # Set Country
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sCountry" -Type String -Value "Canada"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sLanguage" -Type String -Value "FRC"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\Geo" -Name "Name" -Type String -Value "CA"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International\Geo" -Name "Nation" -Type String -Value "39"
+	# Set Internet Explorer language
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Internet Explorer\International" -Name "AcceptLanguage" -Type String -Value "fr-CA,en-CA;q=0.5"
 
-    # Set Internet Explorer language
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Internet Explorer\International" -Name "AcceptLanguage" -Type String -Value "fr-CA,en-CA;q=0.5"
+	# Sets primary editing language to fr-CA - https://docs.microsoft.com/en-us/deployoffice/office2016/customize-language-setup-and-settings-for-office-2016
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\common\languageresources" -Name "preferrededitinglanguage" -Type String -Value "fr-CA"
 
-    # Sets primary editing language to fr-CA - https://docs.microsoft.com/en-us/deployoffice/office2016/customize-language-setup-and-settings-for-office-2016
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\common\languageresources" -Name "preferrededitinglanguage" -Type String -Value "fr-CA"
+	# Set Keyboards
+	Remove-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Preload" -Recurse
+	Remove-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Substitutes" -Recurse
 
-    # Set Keyboards
-    Remove-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Preload" -Recurse
-    Remove-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Substitutes" -Recurse
+	# Set French (Canada) - Canadian French keyboard layout
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Preload" -Name "1" -Type String -Value "00000c0c"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Substitutes" -Name "00000c0c" -Type String -Value "00001009"
 
-    # Set French (Canada) - Canadian French keyboard layout
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Preload" -Name "1" -Type String -Value "00000c0c"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Substitutes" -Name "00000c0c" -Type String -Value "00001009"
-    
-    # Disable input language switch hotkey -https://windowsreport.com/windows-10-switches-keyboard-language
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Toggle" -Name "Hotkey" -Type DWord -Value "3"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Toggle" -Name "Language Hotkey" -Type DWord -Value "3"
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Toggle" -Name "Layout Hotkey" -Type DWord -Value "3"
+	# Set English (Canada) - US keyboard layout
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Preload" -Name "2" -Type String -Value "00001009"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Substitutes" -Name "00001009" -Type String -Value "00000409"
 
-    # Hide the language bar
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\CTF\LangBar" -Name "ShowStatus" -Type DWord -Value "3"
+	# Disable input language switch hotkey -https://windowsreport.com/windows-10-switches-keyboard-language
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Toggle" -Name "Hotkey" -Type DWord -Value "3"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Toggle" -Name "Language Hotkey" -Type DWord -Value "3"
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Keyboard Layout\Toggle" -Name "Layout Hotkey" -Type DWord -Value "3"
 
-    # Set first day of week
-    Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "iFirstDayOfWeek" -Type String -Value "0"
+	# Hide the language bar
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\CTF\LangBar" -Name "ShowStatus" -Type DWord -Value "3"
 
-    # Set date format
-    #Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sLongDate" -Type String -Value "dddd dd MMMM yyyy"
-    #Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sShortDate" -Type String -Value "dd-MM-yyyy"
-    #Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sYearMonth" -Type String -Value "MMMM, yyyy"
+	# Set first day of week
+	Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "iFirstDayOfWeek" -Type String -Value "0"
 
-    # Set time format
-    #Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sTimeFormat" -Type String -Value "HH:mm:ss"
-    #Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sShortTime" -Type String -Value "HH:mm"
+	# Set date format
+	#Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sLongDate" -Type String -Value "dddd dd MMMM yyyy"
+	#Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sShortDate" -Type String -Value "dd-MM-yyyy"
+	#Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sYearMonth" -Type String -Value "MMMM, yyyy"
 
+	# Set time format
+	#Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sTimeFormat" -Type String -Value "HH:mm:ss"
+	#Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\International" -Name "sShortTime" -Type String -Value "HH:mm"
 }
 
 # Disable action center
@@ -362,7 +282,7 @@ Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersio
 Set-RegistryKey -Key "HKLM:\DefaultUser\System\GameConfigStore" -Name "GameDVR_Enabled" -Type DWord -Value "0"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name "AppCaptureEnabled" -Type DWord -Value "0"
 
-# Disable the label "Shortcut To" on shortcuts
+# Disable the label "Shortcut To" on shortcuts - https://www.howtogeek.com/howto/windows-vista/remove-shortcut-text-from-new-shortcuts-in-vista
 $ValueHex = "00,00,00,00"
 $ValueHexified = $ValueHex.Split(",") | ForEach-Object { "0x$_"}
 $ValueBinary = ([byte[]]$ValueHexified)
@@ -381,40 +301,33 @@ Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersio
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ListviewAlphaSelect " -Type DWord -Value "0"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ListViewShadow" -Type DWord -Value "1"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Type DWord -Value "0"
-
 # Visual effects - Disable "Animations in the taskbar" - https://virtualfeller.com/2015/11/19/windows-10-optimization-part-4-user-interface
-
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAnimations" -Type DWord -Value "0"
-
 # Hide People button from Taskbar
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value "0"
-
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name "DefaultApplied" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-338388Enabled" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-338389Enabled" -Type DWord -Value "0"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SystemPaneSuggestionsEnabled" -Type DWord -Value "0"
-
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" -Type REG_DWORD -Value 0
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -name "{20D04FE0-3AEA-1069-A2D8-08002B30309D}"  -Type REG_DWORD -Value 0
-
-# Enable taskbar icons on two screens and show icons where taskbar is open
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name "DefaultApplied" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-338388Enabled" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-338389Enabled" -Type DWord-Value "0"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SystemPaneSuggestionsEnabled" -Type DWord-Value "0"
 
 # Always show alll icons and notifications on the taskbar -   https://winaero.com/blog/always-show-tray-icons-windows-10
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "EnableAutoTray" -Type DWord -Value "0"
 
-# System Optimizations
+# Speed up logoff
 Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "AutoEndTasks" -Type String -Value "1"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "WaitToKillAppTimeout" -Type String -Value "2000"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "HungAppTimeout" -Type String -Value "1000"
+
 # Optimizes Explorer and Start Menu responses Times - https://docs.citrix.com/en-us/workspace-environment-management/current-release/reference/environmental-settings-registry-values.html
 Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "InteractiveDelay" -Type DWord -Value "40"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Control Panel\Desktop" -Name "WaittoKillAppTimeout" -Type String -Value "2000"
 
 # Visual Effects
 # Settings "Visual effects to Custom" - https://support.citrix.com/article/CTX226368
@@ -469,15 +382,15 @@ Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersio
 # Visual effects - Disable "Aero Peek" - https://virtualfeller.com/2015/11/19/windows-10-optimization-part-4-user-interface
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\DWM" -Name "EnableAeroPeek" -Type DWord -Value "0"
 
+# Visual effects - Disable "Save taskbar thumbnail previews" - https://virtualfeller.com/2015/11/19/windows-10-optimization-part-4-user-interface
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\DWM" -Name "AlwaysHibernateThumbnails" -Type DWord -Value "0"
+
 # Set the Title And Border Color to black - https://dybbugt.no/2020/1655 - https://winaero.com/blog/enable-dark-title-bars-custom-accent-color-windows-10
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\DWM" -Name "AccentColor" -Type DWord -Value "4292311040"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\DWM" -Name "ColorizationColor" -Type DWord -Value "4292311040"
 
 # Enable the Border and title bar coloring - https://dybbugt.no/2020/1655
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\DWM" -Name "ColorPrevalence" -Type DWord -Value "1"
-
-# Visual effects - Disable "Save taskbar thumbnail previews" - https://virtualfeller.com/2015/11/19/windows-10-optimization-part-4-user-interface
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\DWM" -Name "AlwaysHibernateThumbnails" -Type DWord -Value "0"
 
 # Remove "Recently added" list from Start Menu
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Windows\Explorer" -Name "HideRecentlyAddedApps" -Type DWord -Value "1"
@@ -488,23 +401,49 @@ Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Windows\Expl
 # Makes Citrix Director reports logons slightly faster - https://james-rankin.com/articles/how-to-get-the-fastest-possible-citrix-logon-times
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" -Name "StartupDelayInMSec" -Type String -Value "0"
 
+# Internet Explorer
+# Disable warning "Protected mode is turned off for the Local intranet zone" - https://www.carlstalhood.com/group-policy-objects-vda-user-settings
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Internet Explorer\Main" -Name "NoProtectedModeBanner" -Type DWord -Value "1"
+
 # Microsoft Office 365/2016/2019
 # Removes the First Things First (EULA) - https://social.technet.microsoft.com/Forums/ie/en-US/d8867a27-894b-44ff-898d-24e0d0c6838a/office-2016-proplus-first-things-first-eula-wont-go-away?forum=Office2016setupdeploy
 # https://www.carlstalhood.com/group-policy-objects-vda-user-settings/#office2013
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Office\16.0\Registration" -Name "AcceptAllEulas" -Type DWord -Value "1"
 
+# Limit Office 365 telemetry - https://www.ghacks.net/2020/11/15/limit-office-365-telemetry-with-this-undocumented-setting
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Office\Common\ClientTelemetry" -Name "DisableTelemetry" -Type DWord -Value "1"
+
+# Disable "Your Privacy Option" message - http://www.edugeek.net/forums/office-software/218099-office-2019-your-privacy-option-popup.html
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common" -Name "PrivacyNoticeShown" -Type DWord -Value "2"
+
+# Disable "Your Privacy Matters" message - https://www.reddit.com/r/sysadmin/comments/q6sesu/office_2021_your_privacy_matters_disable_via_gpo
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\common\Privacy\SettingsStore\Anonymous" -Name "OptionalConnectedExperiencesNoticeVersion" -Type DWord -Value "2"
+
+# Disable "Show the option for Office Insider" - https://docs.microsoft.com/en-us/azure/virtual-desktop/install-office-on-wvd-master-image
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Office\16.0\Common" -Name "InsiderSlabBehavior" -Type DWord -Value "2"
+# Set Outlook's Cached Exchange Mode behavior - https://docs.microsoft.com/en-us/azure/virtual-desktop/install-office-on-wvd-master-image
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Office\16.0\Outlook\Cached Mode" -Name "Enable" -Type DWord -Value "1"
+# 1 month sync
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Office\16.0\Outlook\Cached Mode" -Name "SyncWindowSetting" -Type DWord -Value "1"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Office\16.0\Outlook\Cached Mode" -Name "CalendarSyncWindowSetting" -Type DWord -Value "1"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Policies\Microsoft\Office\16.0\Outlook\Cached Mode" -Name "CalendarSyncWindowSettingMonths" -Type DWord -Value "1"
+
 # Disable teaching callouts - https://docs.microsoft.com/en-us/answers/questions/186354/outlook-remove-blue-tip-boxes.html
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "AutoSaveTottleOnWord" -Type DWord -Value "2"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "MeetingAllowForwardTeachingCallout" -Type DWord -Value "2"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "AutoSaveFirstSaveWord" -Type DWord -Value "2"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "CommingSoonTeachingCallout" -Type DWord -Value "2"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "AutocreateTeachingCallout_MoreLocations" -Type DWord -Value "2"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "Search.TopResults" -Type DWord -Value "2"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "UseTighterSpacingTeachingCallout" -Type DWord -Value "2"
-Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "SLRToggleReplaceTeachingCalloutID" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "AutoSaveFirstSaveWord" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "AutoSaveTottleOnWord" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "CloudSettingsSyncTeachingCallout" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "CommingSoonTeachingCallout" -Type DWord -Value "2"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "DataVisualizerRibbonTeachingCallout" -Type DWord -Value "2"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "ExportToWordProcessTabTeachingCallout" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "FocusedInboxTeachingCallout_2" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "MeetingAllowForwardTeachingCallout" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "Olk_SearchBoxTitleBar_SLR_Sequence" -Type DWord -Value "2"
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "PreviewPlaceUpdate" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "RibbonOverflowTeachingCalloutID" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "Search.TopResults" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "SLRToggleReplaceTeachingCalloutID" -Type DWord -Value "2"
+Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\TeachingCallouts" -Name "UseTighterSpacingTeachingCallout" -Type DWord -Value "2"
 
 # Remove the default file types dialog - https://www.blackforce.co.uk/2016/05/11/disable-office-2016-default-file-types-dialog
 Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\16.0\Common\General" -Name "ShownFileFmtPrompt" -Type DWord -Value "1"
@@ -559,7 +498,7 @@ Else
 }
 
 # Copy Microsoft Teams config file to the default profile
-Copy-File -Path "$appScriptDirectory\$appTeamsConfig" -Destination "$envSystemDrive\Users\Default\AppData\Roaming\Microsoft\Teams" -ErrorAction SilentlyContinue
+Copy-File -Path "$appScriptDirectory\$appTeamsConfig" -Destination "$envSystemDrive\Users\Default\AppData\Roaming\Microsoft\Teams"
 
 # To validate (from the comments section)
 #Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Classes\WOW6432Node\CLSID\{00425F68-FFC1-445F-8EDF-EF78B84BA1C7}\LocalServer" -Name "(Default)" -Type String -Value "`"C:\Program Files (x86)\Microsoft\Teams\current\Teams.exe`""
@@ -572,20 +511,22 @@ Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Microsoft\Office\Outlook\AddIns
 
 # Add login script on new user creation
 $RunOnceKey = "HKLM:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\RunOnce"
-
 If (-not(Test-Path $RunOnceKey))
 {
     Set-RegistryKey -Key $RunOnceKey
 }
+Set-RegistryKey -Key $RunOnceKey -Name "NewUser" -Type String -Value "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe -Ex ByPass -File $NewUserScript"
 
-# Set-RegistryKey -Key $RunOnceKey -Name "NewUser" -Type String -Value "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe -ExecutionPolicy ByPass -File $NewUserScript"
+If (Test-Path -Path $envProgramFiles\Autodesk)
+{
+    # Prevent Autodesk desktop analytics -  https://forums.autodesk.com/t5/installation-licensing/preventing-the-desktop-analytics-popup-on-first-start/td-p/5311565
+    Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Autodesk\MC3" -Name "ADAOptIn" -Type DWord -Value "0"
+    Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Autodesk\MC3" -Name "ADARePrompted" -Type DWord -Value "1"
+    Set-RegistryKey -Key "HKLM:\DefaultUser\Software\Autodesk\MC3" -Name "OverridedByHKLM" -Type DWord -Value "0"
+}
 
 # Unload the Default User registry hive
-Execute-Process -Path "$envWinDir\System32\reg.exe" -Parameters "UNLOAD HKLM\DefaultUser" -WindowStyle Hidden -ContinueOnError
-
-start-sleep -s 10
-
-Execute-Process -Path "$envWinDir\System32\reg.exe" -Parameters "UNLOAD HKLM\DefaultUser" -WindowStyle Hidden -ContinueOnError
+Execute-Process -Path "$envWinDir\System32\reg.exe" -Parameters "UNLOAD HKLM\DefaultUser" -WindowStyle Hidden
 
 # Cleaup temp files
 Remove-Item -Path "$envSystemDrive\Users\Default\*.LOG1" -Force
@@ -593,7 +534,4 @@ Remove-Item -Path "$envSystemDrive\Users\Default\*.LOG2" -Force
 Remove-Item -Path "$envSystemDrive\Users\Default\*.blf" -Force
 Remove-Item -Path "$envSystemDrive\Users\Default\*.regtrans-ms" -Force
 
-# Remove Server Manager link
-Remove-File -Path "$envSystemDrive\Users\Default\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\Server Manager.lnk" -ContinueOnError $True
-
-Write-Log -Message "The optimize base image script completed" -LogType 'CMTrace' -WriteHost $True
+Write-Log -Message "The default user profile was optimized!" -LogType 'CMTrace' -WriteHost $True
