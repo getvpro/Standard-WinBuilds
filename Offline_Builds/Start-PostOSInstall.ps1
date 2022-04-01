@@ -32,6 +32,19 @@ March 27, 2022
 -Updated wallpaper code
 -Re-added optimize base image script
 
+March 28, 2022
+-Moved over code from optimize base image
+
+March 31, 2022
+-Amended Langpack key / cab detection based
+
+March 31, 2022
+-Fixed ExtraLangPackKey type-o
+
+April 1, 2022
+-Moved Set-WinUserLanguageList to correct position inside For loop
+
+
 .EXAMPLE
 ./Start-PostOSInstall.ps1
 
@@ -60,9 +73,20 @@ Set-TimeZone -ID "Eastern Standard Time"
 $OS = (Get-WMIobject -class win32_operatingsystem).Caption
 $LogTimeStamp = (Get-Date).ToString('MM-dd-yyyy-hhmm-tt')
 $PackerRegKey = (Get-ItemProperty -Path "hklm:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name PackerLaunched -ErrorAction SilentlyContinue).PackerLaunched
-$FrenchCaLangPack = (Get-ItemProperty -Path "hklm:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name FrenchCaLangPack -ErrorAction SilentlyContinue).FrenchCaLangPack
+$ExtraLangPack = (Get-ItemProperty -Path "hklm:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name ExtraLangPack -ErrorAction SilentlyContinue).ExtraLangPack
 $PackerStaticIP = (Get-ItemProperty -Path "hklm:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name PackerStaticIP -ErrorAction SilentlyContinue).PackerStaticIP
 $CDDrive = Get-CimInstance Win32_LogicalDisk | ?{ $_.DriveType -eq 5} | select-object -expandproperty DeviceID
+
+## Start of actual script commands
+
+# Set High-perf powerprofile if not laptop type
+
+If (!(Get-WmiObject -Class win32_battery)) {
+
+    write-host "Asset is not a laptop, setting power profile to high performance"
+    write-host "`r`n"
+    powercfg.exe -SETACTIVE "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
+}
 
 ### Create directory structure as required
 IF (-not(test-path -Path "c:\Admin\Scripts")) {
@@ -211,11 +235,92 @@ public class Params
 
 ### Functions
 
+### Remove Windows welcome for new accounts
+
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" /v "PrivacyConsentStatus" /t REG_DWORD /d 1 /f
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" /v "SkipMachineOOBE" /t REG_DWORD /d 1 /f
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" /v "ProtectYourPC" /t REG_DWORD /d 3 /f
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" /v "SkipUserOOBE" /t REG_DWORD /d 1 /f
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "EnableFirstLogonAnimation" /t REG_DWORD /d 0 /f
+
+### Windows server - Adding RSAT roles
+
+IF ((Get-WMIObject -class win32_operatingsystem).Caption -like "*Server*") {
+
+    write-host "Windows server OS confirmed, proceeding with windows feature changes" -ForegroundColor cyan
+
+    IF ((Get-WindowsFeature RSAT-DHCP).Installed -eq $False) {
+
+        write-host "Installing DHCP remote admin role" -ForegroundColor cyan
+        Install-WindowsFeature RSAT-DHCP
+    }
+
+    IF ((Get-WindowsFeature RSAT-DNS-Server).Installed -eq $False) {
+
+        write-host "Installing DNS remote admin feature"
+        Install-WindowsFeature RSAT-DNS-Server
+    }
+
+    IF ((Get-WindowsFeature RSAT-AD-Tools).Installed -eq $False) {
+
+        write-host "Installing AD remote admin feature"
+        Install-WindowsFeature RSAT-AD-Tools
+    }
+
+    IF ((Get-WindowsFeature GPMC).Installed -eq $False) {
+
+        write-host "Installing GPMC remote admin feature"
+        Install-WindowsFeature GPMC
+    }
+
+}
+
+### Install RSAT roles on Win 10
+
+IF ((Get-WmiObject -class win32_operatingsystem).Caption -like "*Windows 10*") {
+
+    $Roles = @(
+    "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0"
+    "Rsat.DHCP.Tools~~~~0.0.1.0"
+    "Rsat.Dns.Tools~~~~0.0.1.0"    
+    "Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0"
+    "Rsat.ServerManager.Tools~~~~0.0.1.0"
+    )
+
+    ForEach ($Item in $Roles) {
+
+        IF ((Get-WindowsCapability -name $Item -Online).State -eq "NotPresent") {
+
+            write-host "Adding $Item"    
+            Add-WindowsCapability -Online -name $Item
+
+        }
+
+        Else {
+
+            write-host "$Item is already installed, no action taken" -ForegroundColor Cyan
+
+        }
+
+    }
+
+}
+
+### Change C drive name to match $Env:Computername
+IF ($Drive.Label -ne $env:COMPUTERNAME) {
+
+    write-host "Change C drive name to match $Env:Computername" -ForegroundColor Cyan
+    write-host "`r`n"
+
+    $drive = Get-WMIObject win32_volume -Filter "DriveLetter = 'C:'"
+    $drive.Label = $env:COMPUTERNAME
+    $drive.put()
+
+}
+
 ### Wallpaper
 copy-item "$CDDrive\Scripts\tetris_build_wallpaper.jpg" -Destination C:\Admin\Scripts -Force -PassThru | Set-ItemProperty -name isreadonly -Value $false
 Set-WallPaper -Image "C:\Admin\scripts\tetris_build_wallpaper.jpg" -Style Fit
-
-### Part 1 - Start of script processing, first steps, requires no internet connection
 
 If ($PackerStaticIP -eq 1) {
 
@@ -275,6 +380,9 @@ IF (Get-process "servermanager" -ErrorAction SilentlyContinue) {
 
     Stop-Process -name servermanager -Force    
 }
+
+# Remove Server Manager link
+Remove-Item -Path "c:\Users\Default\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\Server Manager.lnk" -ErrorAction SilentlyContinue
 
 New-Item -Path HKLM:\SYSTEM\CurrentControlSet\Control\Network\NewNetworkWindowOff -Force
 
@@ -353,70 +461,99 @@ Register-ScheduledTask -XML (Get-content "C:\Admin\Scripts\Monitor-WinUpdates.xm
 
 ### Fr-ca language pack download for Server 2022 systems / Win 10 21H1 is pending
 
-If ($FrenchCaLangPack -eq 1) {
+If ($ExtraLangPack -eq 1) {
 
-    Write-CustomLog -ScriptLog $ScriptLog -Message "FrenchCaLangPack key is set to 1, proceeeding with extra steps to provision Fr-Ca lang pack" -Level INFO
-    
-    Set-Location 'C:\Admin\Language Pack'    
-
-    Write-CustomLog -ScriptLog $ScriptLog -Message "Installing Fr-ca.cab, this process can be up to 10 mins" -Level INFO
+    Write-CustomLog -ScriptLog $ScriptLog -Message "ExtraLangPack key is set to 1, proceeeding with extra steps to provision extra lang pack" -Level INFO    
     
     IF ($OS -like "*Windows 10*") {    
-
-        Add-WindowsPackage -Online -PackagePath "$CDDrive\langpack\Win10-21H1-x64-Fr-Ca.cab" -LogPath "C:\admin\Build\Fr-ca-Install.log" -NoRestart
         
-        Write-CustomLog -ScriptLog $ScriptLog -Message "Adding Fr-Ca to preferred display languages" -Level INFO
+        $LangPacks = GCI "$CDDrive\langpack\Win 10\*.cab" | Select-Object -ExpandProperty FullName
 
-		$OldList = Get-WinUserLanguageList
-		$OldList.Add("fr-CA")
-		Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
-    
+        ForEach ($Lang in $LangPacks) {            
+            
+            $LangShortCode = $Lang.Substring($Lang.Length -9).Split(".")[0]
+
+            Write-CustomLog -ScriptLog $ScriptLog -Message "Installing $LangShortCode. Note: This process can be up to 10 mins" -Level INFO
+            
+            Add-WindowsPackage -Online -PackagePath "$Lang" -LogPath "C:\admin\Build\Lang-Pack-Install.log" -NoRestart
+            
+            Write-CustomLog -ScriptLog $ScriptLog -Message "Adding $LangShortCode to preferred display languages" -Level INFO
+            
+            $OldList = Get-WinUserLanguageList
+			$OldList.Add("$LangShortCode")
+			Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
+        }    
     } 
     
-    IF ($OS -like "*Windows 11*") {
-
-        Add-WindowsPackage -Online -PackagePath "$CDDrive\langpack\Win11-21H1-x64-Fr-Ca.cab" -LogPath "C:\admin\Build\Fr-ca-Install.log" -NoRestart
+    IF ($OS -like "*Windows 11*") {    
         
-        Write-CustomLog -ScriptLog $ScriptLog -Message "Adding Fr-Ca to preferred display languages" -Level INFO
+        $LangPacks = GCI "$CDDrive\langpack\Win 11\*.cab" | Select-Object -ExpandProperty FullName
 
-		$OldList = Get-WinUserLanguageList
-		$OldList.Add("fr-CA")
-		Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
+        ForEach ($Lang in $LangPacks) {            
+            
+            $LangShortCode = $Lang.Substring($Lang.Length -9).Split(".")[0]
+
+            Write-CustomLog -ScriptLog $ScriptLog -Message "Installing $LangShortCode. Note: This process can be up to 10 mins" -Level INFO            
+            
+            Add-WindowsPackage -Online -PackagePath "$Lang" -LogPath "C:\admin\Build\Lang-Pack-Install.log" -NoRestart        
+            
+            Write-CustomLog -ScriptLog $ScriptLog -Message "Adding $LangShortCode to preferred display languages" -Level INFO
+            
+            $OldList = Get-WinUserLanguageList
+			$OldList.Add("$LangShortCode")
+			Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
+        }        
     
-    }
-
     IF ($OS -like "*Microsoft Windows Server 2019*") {
-
-        Add-WindowsPackage -Online -PackagePath "$CDDrive\langpack\Server-2019-x64-Fr-Ca.cab" -LogPath "C:\admin\Build\Fr-ca-Install.log" -NoRestart
         
-        Write-CustomLog -ScriptLog $ScriptLog -Message "Adding Fr-Ca to preferred display languages" -Level INFO
+        $LangPacks = GCI "$CDDrive\langpack\Win 2019\*.cab" | Select-Object -ExpandProperty FullName
 
-		$OldList = Get-WinUserLanguageList
-		$OldList.Add("fr-CA")
-		Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
-    
-    }
+        ForEach ($Lang in $LangPacks) {            
+            
+            $LangShortCode = $Lang.Substring($Lang.Length -9).Split(".")[0]
 
-    IF ($OS -like "*Microsoft Windows Server 2022*") {
-
-        Add-WindowsPackage -Online -PackagePath "$CDDrive\langpack\Server-2022-x64-Fr-Ca.cab" -LogPath "C:\admin\Build\Fr-ca-Install.log" -NoRestart
-        
-        Write-CustomLog -ScriptLog $ScriptLog -Message "Adding Fr-Ca to preferred display languages" -Level INFO
-
-		$OldList = Get-WinUserLanguageList
-		$OldList.Add("fr-CA")
-		Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
+            Write-CustomLog -ScriptLog $ScriptLog -Message "Installing $LangShortCode. Note: This process can be up to 10 mins" -Level INFO           
+            
+            Add-WindowsPackage -Online -PackagePath "$Lang" -LogPath "C:\admin\Build\Lang-Pack-Install.log" -NoRestart        
+            
+            Write-CustomLog -ScriptLog $ScriptLog -Message "Adding $LangShortCode to preferred display languages" -Level INFO
+            
+            $OldList = Get-WinUserLanguageList
+			$OldList.Add("$LangShortCode")
+			Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
+        }                
     
-    }
-    
-    Write-CustomLog -ScriptLog $ScriptLog -Message "Remove .zip files that contained Fr-ca.cab" -Level INFO
-    
+    }    
 
 }
 
+    IF ($OS -like "*Microsoft Windows Server 2022*") {
+        
+            $LangPacks = GCI "$CDDrive\langpack\Win 2022\*.cab" | Select-Object -ExpandProperty FullName
+
+            ForEach ($Lang in $LangPacks) {            
+            
+                $LangShortCode = $Lang.Substring($Lang.Length -9).Split(".")[0]               
+
+                Write-CustomLog -ScriptLog $ScriptLog -Message "Installing $LangShortCode. Note: This process can be up to 10 mins" -Level INFO                
+            
+                Add-WindowsPackage -Online -PackagePath "$Lang" -LogPath "C:\admin\Build\Lang-Pack-Install.log" -NoRestart        
+            
+                Write-CustomLog -ScriptLog $ScriptLog -Message "Adding $LangShortCode to preferred display languages" -Level INFO
+                
+                $OldList = Get-WinUserLanguageList
+				$OldList.Add("$LangShortCode")
+				Set-WinUserLanguageList -LanguageList $OldList -Confirm:$False -Force
+
+            }                   
+    
+        }    
+
+    }
+
 Else {
 
-    Write-CustomLog -ScriptLog $ScriptLog -Message "FrenchCaLangPack key is not set to 1. Only En-US will be enabled on this system" -Level INFO
+    Write-CustomLog -ScriptLog $ScriptLog -Message "ExtraLangPack key is not set to 1. Only En-US will be enabled on this system" -Level INFO
 
 }
 
@@ -437,10 +574,6 @@ Else {
     Write-warning "Basic internet test failed, please check firewall / static IP config / DHCP is recommended for these builds. The next phase requires reqular non firewall / proxy access to windowsupdate.com"
     PAUSE
 }
-
-### Requires additional edits to remove use of PSADT - March 13, 2022
-
-
 
 Write-CustomLog -ScriptLog $ScriptLog -Message "Running Optimize Base image script" -Level INFO
 
