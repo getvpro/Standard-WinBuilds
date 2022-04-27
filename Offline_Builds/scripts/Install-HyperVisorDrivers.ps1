@@ -33,6 +33,9 @@ March 31, 2022
 April 1, 2022
 -Added restart-computer
 
+April 27, 2022
+-Removed restart-computer
+
 .EXAMPLE
 ./Install-HyperVisorDrivers.ps1
 
@@ -287,4 +290,4 @@ IF ($VMType -eq "KVM") {
 
 Write-CustomLog -ScriptLog $ScriptLog -Message "Hypervisor driver install script completed, please reboot" -Level INFO
 
-Restart-Computer -force
+
