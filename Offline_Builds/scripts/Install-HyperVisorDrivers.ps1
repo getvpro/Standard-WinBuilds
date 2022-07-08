@@ -36,6 +36,9 @@ April 1, 2022
 April 27, 2022
 -Removed restart-computer
 
+July 8, 2022
+-Changed reg key used by $VMType to support Hyper-V
+
 .EXAMPLE
 ./Install-HyperVisorDrivers.ps1
 
@@ -66,7 +69,7 @@ $ScriptLog = "c:\Admin\Build\HyperVisorDriverInstall-$LogTimeStamp.txt"
 ###
 
 $CDDrive = Get-CimInstance Win32_LogicalDisk | ?{ $_.DriveType -eq 5} | select-object -expandproperty DeviceID
-$VMType = (Get-ItemProperty -path HKLM:\HARDWARE\DESCRIPTION\System\BIOS -Name SystemManufacturer).SystemManufacturer
+$VMType = (Get-ItemProperty -path HKLM:\SYSTEM\CurrentControlSet\Control\SystemInformation -Name SystemManufacturer).SystemManufacturer
 
 Function Get-VMToolsInstalled {
     
