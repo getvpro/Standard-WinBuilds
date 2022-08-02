@@ -155,9 +155,7 @@ $VMT = Get-VMToolsInstalled
 
 IF (($VMType -eq "VMware, Inc.") -and (-not($VMT))) {
 
-    Write-CustomLog -ScriptLog $ScriptLog -Message "VMware type VM confirmed, starting install attempt of VMware tools" -Level INFO
-    
-    $CDDrive = "N:\BINARIES\Software\SCRIPTS\GIT\Start-StandardBuild\Build_offline\"
+    Write-CustomLog -ScriptLog $ScriptLog -Message "VMware type VM confirmed, starting install attempt of VMware tools" -Level INFO    
 
     start-process (gci "$CDDrive\hypervisor_drivers" | Where {$_.Name -like "VMware-tools*"} | Select-object -Expandproperty FullName) -ArgumentList '/s /v "/qb REBOOT=R"' -Wait
 
