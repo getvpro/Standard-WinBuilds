@@ -39,6 +39,9 @@ April 27, 2022
 July 8, 2022
 -Changed reg key used by $VMType to support Hyper-V
 
+Aug 1, 2022
+-Updated logic to get latest VMware-tools.exe
+
 .EXAMPLE
 ./Install-HyperVisorDrivers.ps1
 
@@ -59,6 +62,7 @@ IF (-not(test-path c:\admin\Build)) {
 
 $OS = (Get-WMIobject -class win32_operatingsystem).Caption
 $LogTimeStamp = (Get-Date).ToString('MM-dd-yyyy-hhmm-tt')
+$env:SEE_MASK_NOZONECHECKS = 1 ## Removes prompt on running installs from network mapped locations
 
 ### Powershell module/package management pre-reqs
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -151,9 +155,13 @@ $VMT = Get-VMToolsInstalled
 
 IF (($VMType -eq "VMware, Inc.") -and (-not($VMT))) {
 
-    Write-CustomLog -ScriptLog $ScriptLog -Message "VMware type VM confirmed, starting install attempt of VMware tools" -Level INFO    
+    Write-CustomLog -ScriptLog $ScriptLog -Message "VMware type VM confirmed, starting install attempt of VMware tools" -Level INFO
+    
+    $CDDrive = "N:\BINARIES\Software\SCRIPTS\GIT\Start-StandardBuild\Build_offline\"
 
-    Start-Process "$CDDrive\hypervisor_drivers\VMware-tools-11.3.5 x64.exe" -ArgumentList '/s /v "/qb REBOOT=R"' -Wait
+    start-process (gci "$CDDrive\hypervisor_drivers" | Where {$_.Name -like "VMware-tools*"} | Select-object -Expandproperty FullName) -ArgumentList '/s /v "/qb REBOOT=R"' -Wait
+
+    #Start-Process "$CDDrive\hypervisor_drivers\VMware-tools-11.3.5 x64.exe" -ArgumentList '/s /v "/qb REBOOT=R"' -Wait
 
     ### 3 - After the installation is finished, check to see if the 'VMTools' service enters the 'Running' state every 2 seconds for 10 seconds
     $Running = $false
