@@ -8,6 +8,12 @@
 <!-- March 22, 2022: Fr-Ca support added, new password -->
 <!-- April 26, 2022: Fr-ca | ExtraLangPack -->
 <!-- New reference for gitupload  -->
+<!-- INDEX 2 = Win 2019 standard w GUI , index 4 = Win 2019 datacenter w GUI  -->
+<!-- Sept 18, 2023 -->
+<!-- Updated for vSphere 8, using %ConfigSetRoot% to detect CDROM drive -->
+<!-- Added back KMS key to cover  Win 2019 standard -->
+<!-- Fixed autobuild password -->
+<!-- Sept 26, 2023 - CHANGEME references added back for upload to GITHUB -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
     <settings pass="windowsPE">
         <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
@@ -72,17 +78,17 @@
                         <PartitionID>3</PartitionID>
                     </InstallTo>
                     <WillShowUI>OnError</WillShowUI>
-                    <InstallToAvailablePartition>false</InstallToAvailablePartition>
+                    <InstallToAvailablePartition>False</InstallToAvailablePartition>
                 </OSImage>
             </ImageInstall>
             <UserData>
                 <ProductKey>
-                    <Key>N69G4-B89J2-4G8F4-WWYCC-J464C</Key>
+					<Key>N69G4-B89J2-4G8F4-WWYCC-J464C</Key>
                     <WillShowUI>OnError</WillShowUI>
                 </ProductKey>
                 <AcceptEula>true</AcceptEula>
                 <FullName>Win Autobuild</FullName>
-                <Organization>CHANGEME</Organization>
+                <Organization>TBD</Organization>
             </UserData>
             <UseConfigurationSet>true</UseConfigurationSet>
         </component>
@@ -94,6 +100,12 @@
             <PathAndCredentials wcm:action="add" wcm:keyValue="2">                
                 <Path>%configsetroot%\hypervisor_drivers\nutanix</Path>
             </PathAndCredentials>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="3">                
+                <Path>%configsetroot%\hypervisor_drivers</Path>
+            </PathAndCredentials>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="4">                
+                <Path>%configsetroot%</Path>
+            </PathAndCredentials>
         </DriverPaths>
         </component>
     </settings>
@@ -103,7 +115,7 @@
                 <HelpCustomized>false</HelpCustomized>
             </OEMInformation>
             <TimeZone>Eastern Standard Time</TimeZone>
-            <ComputerName>win2019-gold</ComputerName>
+            <ComputerName>win2019-auto</ComputerName>
         </component>
         <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         </component>
@@ -125,11 +137,11 @@
         <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
             <AutoLogon>
                 <Password>
-                    <Value>CHANGEME</Value>
+                    <Value>CHANGEME2SOMETHINGSECURE!</Value>
                     <PlainText>true</PlainText>
                 </Password>
                 <LogonCount>5</LogonCount>
-                <Username>automan</Username>
+                <Username>autobuild</Username>
                 <Enabled>true</Enabled>
             </AutoLogon>
             <FirstLogonCommands>
@@ -176,7 +188,7 @@
                     <Description>Disable Hibernation Mode</Description>
                 </SynchronousCommand>
                 <SynchronousCommand wcm:action="add">
-                    <CommandLine>cmd.exe /c wmic useraccount where "name='automan'" set PasswordExpires=FALSE</CommandLine>
+                    <CommandLine>cmd.exe /c wmic useraccount where "name='autobuild'" set PasswordExpires=FALSE</CommandLine>
                     <Order>9</Order>
                     <Description>Disable password expiration for Administrator user</Description>
                 </SynchronousCommand>
@@ -196,15 +208,25 @@
                     <Description>Add reg key to trigger later install of extra language packs</Description>
                 </SynchronousCommand>                
                 <SynchronousCommand wcm:action="add">
-                    <CommandLine>cmd.exe /c C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -File %configsetroot%\Scripts\Install-HyperVisorDrivers.ps1</CommandLine>
-                    <Description>Start first steps after GUI logon</Description>
+                    <CommandLine>cmd.exe /c C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -File %configsetroot%\scripts\Install-HyperVisorDrivers.ps1</CommandLine>                    
+                    <Description>Install hypervisor drivers based on detection of under-lying platform: vSphere, Nutanix, Citrix XenServer</Description>
                     <Order>13</Order>
-                </SynchronousCommand>                
+                </SynchronousCommand>
                 <SynchronousCommand wcm:action="add">
-                    <CommandLine>cmd.exe /c C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -File %configsetroot%\Scripts\Start-PostOSInstall.ps1</CommandLine>
-                    <Description>Install VMware tools</Description>
-                    <Order>14</Order>                
-                </SynchronousCommand>               
+                    <CommandLine>cmd.exe /c C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -File %configsetroot%\scripts\Start-PostOSInstall.ps1</CommandLine>
+                    <Order>14</Order>
+                    <Description>Post OS install script that performs many functions</Description>                
+                </SynchronousCommand>
+                <SynchronousCommand wcm:action="add">
+                    <CommandLine>cmd.exe /c C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -File %configsetroot%\scripts\Start-DomainJoin.ps1</CommandLine>
+                    <Order>15</Order>
+                    <Description>Run AD Domain Join</Description>
+                </SynchronousCommand>
+                <SynchronousCommand wcm:action="add">
+                    <CommandLine>cmd.exe /c C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -File %configsetroot%\scripts\Enable-WinRM.ps1</CommandLine>
+                    <Order>16</Order>
+                    <Description>Enable WinRM</Description>
+                </SynchronousCommand>  
             </FirstLogonCommands>
             <OOBE>
                 <HideEULAPage>true</HideEULAPage>
@@ -217,18 +239,18 @@
             </OOBE>
             <UserAccounts>
                 <AdministratorPassword>
-                    <Value>CHANGEME</Value>
+                    <Value>CHANGEME2SOMETHINGSECURE!</Value>
                     <PlainText>true</PlainText>
                 </AdministratorPassword>
 		<LocalAccounts>
                     <LocalAccount wcm:action="add">
                         <Password>
-                            <Value>CHANGEME</Value>
+                            <Value>CHANGEME2SOMETHINGSECURE!</Value>
                             <PlainText>true</PlainText>
                         </Password>
                         <Group>administrators</Group>
                         <DisplayName>Auto install local admin</DisplayName>
-                        <Name>automan</Name>
+                        <Name>autobuild</Name>
                         <Description>Custom local admin for automated build</Description>
                     </LocalAccount>
                 </LocalAccounts>
